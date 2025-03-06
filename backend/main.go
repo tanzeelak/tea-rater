@@ -25,7 +25,8 @@ type User struct {
 }
 
 type TeaRating struct {
-	UserID      uint    `json:"id" gorm:"primaryKey"`
+	ID          uint    `json:"id" gorm:"primaryKey"`
+	UserID      uint    `json:"user_id" `
 	TeaName     string  `json:"tea_name"`
 	Umami       float64 `json:"umami"`
 	Astringency float64 `json:"astringency"`
@@ -46,10 +47,12 @@ func main() {
 		log.Fatal("Failed to connect database")
 	}
 	db.AutoMigrate(&Tea{})
+	db.AutoMigrate(&TeaRating{})
 	initializeTeas()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/ratings", handleRatings).Methods("GET", "POST")
+	r.HandleFunc("/submit", handleSubmit).Methods("POST")
+	r.HandleFunc("/rating", handleRating).Methods("GET")
 	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")
 	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE")
 	r.HandleFunc("/summary", handleSummary).Methods("GET")
@@ -105,22 +108,23 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Handle new rating submissions and retrieve all ratings
-func handleRatings(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		var rating TeaRating
-		if err := json.NewDecoder(r.Body).Decode(&rating); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		db.Create(&rating)
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(rating)
-	} else if r.Method == http.MethodGet {
-		var ratings []TeaRating
-		db.Find(&ratings)
-		json.NewEncoder(w).Encode(ratings)
+// Handle new rating submissions
+func handleSubmit(w http.ResponseWriter, r *http.Request) {
+	var rating TeaRating
+	if err := json.NewDecoder(r.Body).Decode(&rating); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
+	db.Create(&rating)
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(rating)
+}
+
+// Handle retrieve all ratings
+func handleRating(w http.ResponseWriter, r *http.Request) {
+	var ratings []TeaRating
+	db.Find(&ratings)
+	json.NewEncoder(w).Encode(ratings)
 }
 
 // Handle editing existing ratings
