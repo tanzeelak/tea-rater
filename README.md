@@ -1,7 +1,6 @@
 # tea-rater
 
 Backend
-
 `cd backend`
 `go run main.go`
 
