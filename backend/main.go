@@ -48,10 +48,12 @@ func main() {
 	}
 	db.AutoMigrate(&Tea{})
 	db.AutoMigrate(&TeaRating{})
+	db.AutoMigrate(&User{})
 	initializeTeas()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
+	r.HandleFunc("/register", handleRegister).Methods("POST")
 	r.HandleFunc("/rating", handleRating).Methods("GET")
 	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")
 	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE")
@@ -89,7 +91,23 @@ func initializeTeas() {
 	}
 }
 
-// Handle user login using only name (case insensitive)
+// Handle new user registration
+func handleRegister(w http.ResponseWriter, r *http.Request) {
+	var user User
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	user.Name = strings.ToLower(strings.TrimSpace(user.Name))
+	if err := db.Create(&user).Error; err != nil {
+		http.Error(w, "User already exists", http.StatusConflict)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(user)
+}
+
+// Handle user login
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Username string `json:"username"`
@@ -100,12 +118,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := strings.ToLower(strings.TrimSpace(request.Username))
-	if username == "admin" {
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Login successful", "token": "valid-admin-token"})
-	} else {
-		http.Error(w, "Invalid username", http.StatusUnauthorized)
+	var user User
+	if err := db.Where("name = ?", username).First(&user).Error; err != nil {
+		http.Error(w, "User not found", http.StatusUnauthorized)
+		return
 	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Login successful", "token": fmt.Sprintf("user-%d", user.ID)})
 }
 
 // Handle new rating submissions
