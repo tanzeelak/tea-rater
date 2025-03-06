@@ -52,14 +52,14 @@ func main() {
 	initializeTeas()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/submit", handleSubmit).Methods("POST")        // good
-	r.HandleFunc("/register", handleRegister).Methods("POST")    // good
-	r.HandleFunc("/rating", handleRating).Methods("GET")         // good
-	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")      // good
-	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE") // good
+	r.HandleFunc("/submit", handleSubmit).Methods("POST")
+	r.HandleFunc("/register", handleRegister).Methods("POST")
+	r.HandleFunc("/rating", handleRating).Methods("GET")
+	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")
+	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE")
 	r.HandleFunc("/summary", handleSummary).Methods("GET")
-	r.HandleFunc("/admin", handleAdminView).Methods("GET")
-	r.HandleFunc("/login", handleLogin).Methods("POST") // good
+	r.HandleFunc("/dashboard", handleDashboard).Methods("GET")
+	r.HandleFunc("/login", handleLogin).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -135,6 +135,17 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	var existingTea Tea
+	if err := db.Where("id = ?", rating.TeaID).First(&existingTea).Error; err != nil {
+		http.Error(w, "Tea ID does not exist", http.StatusNotFound)
+		return
+	}
+	var existingUser User
+	if err := db.Where("id = ?", rating.UserID).First(&existingUser).Error; err != nil {
+		http.Error(w, "User ID does not exist", http.StatusNotFound)
+		return
+	}
+
 	db.Create(&rating)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(rating)
@@ -187,16 +198,33 @@ type Summary struct {
 	AvgRating      float64 `json:"avg_rating"`
 	AvgUmami       float64 `json:"avg_umami"`
 	AvgAstringency float64 `json:"avg_astringency"`
+	AvgFloral      float64 `json:"avg_floral"`
+	AvgVegetal     float64 `json:"avg_vegetal"`
+	AvgNutty       float64 `json:"avg_nutty"`
+	AvgRoasted     float64 `json:"avg_roasted"`
 }
 
 func handleSummary(w http.ResponseWriter, r *http.Request) {
 	var summaries []Summary
-	db.Raw("SELECT tea_name, AVG(rating) as avg_rating, AVG(umami) as avg_umami, AVG(astringency) as avg_astringency FROM tea_ratings GROUP BY tea_name").Scan(&summaries)
+	db.Raw(`SELECT 
+		t.tea_name, 
+		AVG(tr.rating) as avg_rating, 
+		AVG(tr.umami) as avg_umami, 
+		AVG(tr.astringency) as avg_astringency,
+		AVG(tr.floral) as avg_floral,
+		AVG(tr.vegetal) as avg_vegetal,
+		AVG(tr.nutty) as avg_nutty,
+		AVG(tr.roasted) as avg_roasted
+		FROM tea_ratings tr 
+		JOIN teas t ON tr.tea_id = t.id 
+		GROUP BY tr.tea_id`).
+		Scan(&summaries)
+
 	json.NewEncoder(w).Encode(summaries)
 }
 
-// Admin Dashboard - Returns all data
-type AdminView struct {
+// Dashboard - Returns all data
+type Dashboard struct {
 	TeaName     string  `json:"tea_name"`
 	Umami       float64 `json:"umami"`
 	Astringency float64 `json:"astringency"`
@@ -208,8 +236,26 @@ type AdminView struct {
 	Rating      float64 `json:"rating"`
 }
 
-func handleAdminView(w http.ResponseWriter, r *http.Request) {
-	var adminData []AdminView
-	db.Raw("SELECT tea_name, umami, astringency, floral, vegetal, nutty, roasted, body, rating FROM tea_ratings").Scan(&adminData)
+func handleDashboard(w http.ResponseWriter, r *http.Request) {
+	userToken := r.Header.Get("Authorization")
+	if userToken == "" {
+		http.Error(w, "Unauthorized: No token provided", http.StatusUnauthorized)
+		return
+	}
+
+	userID := strings.TrimPrefix(userToken, "user-")
+	var user User
+	if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
+		http.Error(w, "Unauthorized: Invalid user", http.StatusUnauthorized)
+		return
+	}
+
+	if strings.ToLower(user.Name) != "admin" {
+		http.Error(w, "Forbidden: Admin access required", http.StatusForbidden)
+		return
+	}
+
+	var adminData []TeaRating // TODO: show something else
+	db.Find(&adminData)
 	json.NewEncoder(w).Encode(adminData)
 }
