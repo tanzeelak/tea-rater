@@ -26,8 +26,8 @@ type User struct {
 
 type TeaRating struct {
 	ID          uint    `json:"id" gorm:"primaryKey"`
-	UserID      uint    `json:"user_id" `
-	TeaName     string  `json:"tea_name"`
+	UserID      uint    `json:"user_id" gorm:"foreignKey"`
+	TeaID       uint    `json:"tea_id" gorm:"foreignKey"`
 	Umami       float64 `json:"umami"`
 	Astringency float64 `json:"astringency"`
 	Floral      float64 `json:"floral"`
@@ -52,14 +52,14 @@ func main() {
 	initializeTeas()
 
 	r := mux.NewRouter()
-	r.HandleFunc("/submit", handleSubmit).Methods("POST")
-	r.HandleFunc("/register", handleRegister).Methods("POST")
-	r.HandleFunc("/rating", handleRating).Methods("GET")
-	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")
-	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE")
+	r.HandleFunc("/submit", handleSubmit).Methods("POST")        // good
+	r.HandleFunc("/register", handleRegister).Methods("POST")    // good
+	r.HandleFunc("/rating", handleRating).Methods("GET")         // good
+	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")      // good
+	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE") // good
 	r.HandleFunc("/summary", handleSummary).Methods("GET")
 	r.HandleFunc("/admin", handleAdminView).Methods("GET")
-	r.HandleFunc("/login", handleLogin).Methods("POST")
+	r.HandleFunc("/login", handleLogin).Methods("POST") // good
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
