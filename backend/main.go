@@ -54,9 +54,9 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/register", handleRegister).Methods("POST")
-	r.HandleFunc("/rating", handleRating).Methods("GET")
-	r.HandleFunc("/rating/{id}", handleEdit).Methods("PUT")
-	r.HandleFunc("/rating/{id}", handleDelete).Methods("DELETE")
+	r.HandleFunc("/ratings", handleRatings).Methods("GET")
+	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
+	r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")
 	r.HandleFunc("/summary", handleSummary).Methods("GET")
 	r.HandleFunc("/dashboard", handleDashboard).Methods("GET")
 	r.HandleFunc("/login", handleLogin).Methods("POST")
@@ -152,7 +152,7 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 }
 
 // Handle retrieve all ratings
-func handleRating(w http.ResponseWriter, r *http.Request) {
+func handleRatings(w http.ResponseWriter, r *http.Request) {
 	var ratings []TeaRating
 	db.Find(&ratings)
 	json.NewEncoder(w).Encode(ratings)
@@ -223,7 +223,7 @@ func handleSummary(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(summaries)
 }
 
-// Dashboard - Returns all data
+// Dashboard - Returns data stats
 type Dashboard struct {
 	TeaName     string  `json:"tea_name"`
 	Umami       float64 `json:"umami"`
@@ -254,8 +254,6 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Forbidden: Admin access required", http.StatusForbidden)
 		return
 	}
-
-	var adminData []TeaRating // TODO: show something else
-	db.Find(&adminData)
-	json.NewEncoder(w).Encode(adminData)
+	// TODO: Statistics
+	return
 }
