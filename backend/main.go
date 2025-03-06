@@ -14,8 +14,9 @@ import (
 )
 
 type Tea struct {
-	ID      uint   `json:"id" gorm:"primaryKey"`
-	TeaName string `json:"tea_name"`
+	ID       uint   `json:"id" gorm:"primaryKey"`
+	TeaName  string `json:"tea_name"`
+	Provider string `json:"provider"`
 }
 
 type User struct {
@@ -73,11 +74,12 @@ func initializeTeas() {
 	db.Model(&Tea{}).Count(&existingCount)
 	if existingCount == 0 {
 		teas := []Tea{
-			{TeaName: "Dragonwell"},
-			{TeaName: "Cloud & Mist"},
-			{TeaName: "Gunpowder"},
-			{TeaName: "Duyun Maojian"},
-			{TeaName: "Guizhou"},
+			{TeaName: "Dragonwell", Provider: "Clovis"},
+			{TeaName: "Yun Wu", Provider: "Tanzeela"},
+			{TeaName: "Laoshan", Provider: "Itsi"},
+			{TeaName: "Kamairicha", Provider: "Tanzeela"},
+			{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
+			{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
 		}
 		db.Create(&teas)
 		fmt.Println("Initialized database with sample teas.")
