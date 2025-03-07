@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "./components/Login";
 import Home from "./pages/Home";
 import Dashboard from "./pages/Dashboard";
-import Register from "./components/Register";
+import Register from "./components/RegisterUser";
 
 const App: React.FC = () => {
   const [token, setToken] = useState<string | null>(localStorage.getItem("token"));

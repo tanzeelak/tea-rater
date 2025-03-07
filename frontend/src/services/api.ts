@@ -19,8 +19,8 @@ export const getRatings = async () => {
 };
 
 
-export const submitRating = async (userId: number, teaId: number, ratingData: object) => {
-  return axios.post(`${API_BASE_URL}/submit`, { user_id: userId, tea_id: teaId, ...ratingData });
+export const submitRating = async (ratingData: object) => {
+  return axios.post(`${API_BASE_URL}/submit`, { ...ratingData });
 };
 
 export const getSummary = async () => {

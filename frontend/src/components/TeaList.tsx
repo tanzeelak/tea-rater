@@ -13,7 +13,6 @@ const TeaList: React.FC = () => {
   useEffect(() => {
     getTeas().then((res) => setTeaList(res.data as Tea[]));
   }, []);
-
   return (
     <ul>
       {teaList.map((tea) => (
