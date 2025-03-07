@@ -12,8 +12,8 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
   const [teaId, setTeaId] = useState<number>(0);
   const [rating, setRating] = useState<Rating>({
     id: 0,
-    userId: 0,
-    teaId: 0,
+    user_id: 0,
+    tea_id: 0,
     umami: 0,
     astringency: 0,
     floral: 0,
