@@ -7,3 +7,8 @@ Backend
 Database
 `cd backend`
 `sqlite3 ratings.db`
+
+Frontend
+`cd frontend`
+`npm install`
+`npm run dev`

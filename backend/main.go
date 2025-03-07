@@ -53,7 +53,8 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
-	r.HandleFunc("/register", handleRegister).Methods("POST")
+	r.HandleFunc("/teas", handleTeas).Methods("GET")
+	r.HandleFunc("/register_user", handleRegisterUser).Methods("POST")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
 	r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")
@@ -92,7 +93,7 @@ func initializeTeas() {
 }
 
 // Handle new user registration
-func handleRegister(w http.ResponseWriter, r *http.Request) {
+func handleRegisterUser(w http.ResponseWriter, r *http.Request) {
 	var user User
 	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -156,6 +157,13 @@ func handleRatings(w http.ResponseWriter, r *http.Request) {
 	var ratings []TeaRating
 	db.Find(&ratings)
 	json.NewEncoder(w).Encode(ratings)
+}
+
+// Handle retrieve teas
+func handleTeas(w http.ResponseWriter, r *http.Request) {
+	var teas []Tea
+	db.Find(&teas)
+	json.NewEncoder(w).Encode(teas)
 }
 
 // Handle editing existing ratings
