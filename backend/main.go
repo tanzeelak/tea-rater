@@ -54,7 +54,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/teas", handleTeas).Methods("GET")
-	r.HandleFunc("/register_user", handleRegisterUser).Methods("POST")
+	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
 	r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")

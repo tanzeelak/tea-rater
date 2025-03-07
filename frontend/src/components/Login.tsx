@@ -6,15 +6,6 @@ interface LoginProps {
   setToken: (token: string) => void;
 }
 
-type AxiosResponse<T> = {
-    data: T;
-    status: number;
-    statusText: string;
-    headers: any;
-    config: any;
-    request: any;
-  };
-  
 const Login: React.FC<LoginProps> = ({ setToken }) => {
   const [username, setUsername] = useState("");
 

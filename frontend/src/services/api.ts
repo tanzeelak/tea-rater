@@ -6,6 +6,10 @@ export const loginUser = async (username: string) => {
   return axios.post(`${API_BASE_URL}/login`, { username });
 };
 
+export const registerUser = async (username: string) => {
+  return axios.post(`${API_BASE_URL}/register-user`, { "name": username });
+}
+
 export const getTeas = async () => {
   return axios.get(`${API_BASE_URL}/teas`);
 };
