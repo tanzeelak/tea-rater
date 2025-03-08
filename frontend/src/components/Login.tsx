@@ -11,18 +11,28 @@ const Login: React.FC<LoginProps> = ({ setToken }) => {
 
   const handleSubmit = async () => {
     try {
+      if (!username.trim()) {
+        alert("Please enter a username");
+        return;
+      }
+
+      let res: any;
       if (isRegistering) {
-        const res: any = await registerUser(username);
-        if (res.data.token) {
-          setToken(res.data.token);
-          localStorage.setItem("authToken", res.data.token);
-        }
+        res = await registerUser(username);
+        console.log("Registration response:", res.data); // For debugging
       } else {
-        const res: any = await loginUser(username);
-        setToken(res.data.token);
-        localStorage.setItem("authToken", res.data.token);
+        res = await loginUser(username);
+      }
+      
+      const token = res.data.token;
+      if (token) {
+        setToken(token);
+        localStorage.setItem("authToken", token);
+      } else {
+        throw new Error("No token received");
       }
     } catch (error) {
+      console.error("Error:", error);
       alert(isRegistering ? "Registration failed!" : "Login failed!");
     }
   };

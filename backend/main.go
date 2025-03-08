@@ -107,7 +107,7 @@ func handleRegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(user)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful", "token": fmt.Sprintf("user-%d", user.ID)})
 }
 
 // Handle user login
