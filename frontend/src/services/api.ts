@@ -14,8 +14,8 @@ export const registerUser = async (username: string) => {
   return axios.post(`${API_BASE_URL}/register-user`, { "name": username });
 };
 
-export const getTeas = async () => {
-  return axios.get(`${API_BASE_URL}/teas`);
+export const getTeas = (userId: number) => {
+  return axios.get(`${API_BASE_URL}/teas?user_id=${userId}`);
 };
 
 export const registerTea = async (teaName: string, provider: string) => {

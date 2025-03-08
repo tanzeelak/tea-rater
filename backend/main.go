@@ -176,9 +176,49 @@ func handleRatings(w http.ResponseWriter, r *http.Request) {
 
 // Handle retrieve teas
 func handleTeas(w http.ResponseWriter, r *http.Request) {
+	// Get user ID from query parameter
+	userID := r.URL.Query().Get("user_id")
+	if userID == "" {
+		http.Error(w, "user_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// Get all teas that haven't been rated by this user
 	var teas []Tea
-	db.Find(&teas)
-	json.NewEncoder(w).Encode(teas)
+	db.Raw(`
+		SELECT t.* 
+		FROM teas t 
+		WHERE t.id NOT IN (
+			SELECT tea_id 
+			FROM tea_ratings 
+			WHERE user_id = ?
+		)
+	`, userID).Scan(&teas)
+
+	// Create response with display format
+	type TeaResponse struct {
+		ID       uint   `json:"id"`
+		TeaName  string `json:"tea_name"`
+		Provider string `json:"provider"`
+		Source   string `json:"source"`
+		Display  string `json:"display"`
+	}
+
+	var response []TeaResponse
+	for _, tea := range teas {
+		displayStr := tea.TeaName
+		if tea.Source != "" {
+			displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
+		}
+		response = append(response, TeaResponse{
+			ID:       tea.ID,
+			TeaName:  tea.TeaName,
+			Provider: tea.Provider,
+			Source:   tea.Source,
+			Display:  displayStr,
+		})
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 // Handle editing existing ratings

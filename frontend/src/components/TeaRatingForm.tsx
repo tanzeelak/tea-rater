@@ -34,8 +34,8 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
   });
 
   useEffect(() => {
-    getTeas().then((res) => setTeaList(res.data as Tea[]));
-  }, [refreshTrigger]);
+    getTeas(userId).then((res) => setTeaList(res.data as Tea[]));
+  }, [refreshTrigger, userId]);
 
   useEffect(() => {
     if (editingRating) {
