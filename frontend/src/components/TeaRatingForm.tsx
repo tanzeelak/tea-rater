@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from "react";
-import { getTeas, submitRating } from "../services/api";
+import { getTeas, submitRating, editRating } from "../services/api";
 import { Rating, Tea } from "../types";
-
 
 interface TeaRatingFormProps {
   userId: number;
+  editingRating?: Rating | null;
+  onEditComplete?: () => void;
 }
 
-const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
+const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId, editingRating = null, onEditComplete }) => {
   const [teaList, setTeaList] = useState<Tea[]>([]);
-  const [teaId, setTeaId] = useState<number>(0);
+  const [teaId, setTeaId] = useState<number>(editingRating?.tea_id || 0);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
-  const [rating, setRating] = useState<Rating>({
+  const [rating, setRating] = useState<Rating>(editingRating || {
     id: 0,
     user_id: 0,
     tea_id: 0,
@@ -30,6 +31,13 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
     getTeas().then((res) => setTeaList(res.data as Tea[]));
   }, []);
 
+  useEffect(() => {
+    if (editingRating) {
+      setRating(editingRating);
+      setTeaId(editingRating.tea_id);
+    }
+  }, [editingRating]);
+
   const handleSubmit = async () => {
     if (teaId === 0) {
       setShowError(true);
@@ -41,32 +49,52 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
 
     rating.user_id = userId;
     rating.tea_id = teaId;
-    await submitRating(rating);
-    
-    // Show success message
-    setShowSuccess(true);
-    setShowError(false);
-    
-    // Reset form
-    setTeaId(0);
-    setRating({
-      id: 0,
-      user_id: 0,
-      tea_id: 0,
-      umami: 0,
-      astringency: 0,
-      floral: 0,
-      vegetal: 0,
-      nutty: 0,
-      roasted: 0,
-      body: 0,
-      rating: 0,
-    });
 
-    // Hide success message after 3 seconds
-    setTimeout(() => {
-      setShowSuccess(false);
-    }, 3000);
+    try {
+      if (editingRating) {
+        await editRating(editingRating.id, rating);
+      } else {
+        await submitRating(rating);
+      }
+      
+      // Show success message
+      setShowSuccess(true);
+      setShowError(false);
+      
+      // Reset form if not editing
+      if (!editingRating) {
+        setTeaId(0);
+        setRating({
+          id: 0,
+          user_id: 0,
+          tea_id: 0,
+          umami: 0,
+          astringency: 0,
+          floral: 0,
+          vegetal: 0,
+          nutty: 0,
+          roasted: 0,
+          body: 0,
+          rating: 0,
+        });
+      }
+
+      // Call onEditComplete if provided
+      if (editingRating && onEditComplete) {
+        onEditComplete();
+      }
+
+      // Hide success message after 3 seconds
+      setTimeout(() => {
+        setShowSuccess(false);
+      }, 3000);
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      setShowError(true);
+      setTimeout(() => {
+        setShowError(false);
+      }, 3000);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +113,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
           marginBottom: '1rem',
           textAlign: 'center'
         }}>
-          Rating submitted successfully!
+          Rating {editingRating ? 'updated' : 'submitted'} successfully!
         </div>
       )}
       {showError && (
@@ -97,7 +125,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
           marginBottom: '1rem',
           textAlign: 'center'
         }}>
-          Please select a tea before submitting!
+          {teaId === 0 ? 'Please select a tea before submitting!' : 'Error submitting rating. Please try again.'}
         </div>
       )}
       <select 
@@ -113,6 +141,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
           marginBottom: '1rem',
           width: '100%'
         }}
+        disabled={!!editingRating}
       >
         <option value="0">Select a Tea</option>
         {teaList.map((tea) => (
@@ -153,7 +182,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
         <label>Rating:</label>
         <input type="number" name="rating" value={rating.rating} onChange={handleChange} />
       </div>
-      <button onClick={handleSubmit}>Submit Rating</button>
+      <button onClick={handleSubmit}>{editingRating ? 'Update Rating' : 'Submit Rating'}</button>
     </div>
   );
 };
