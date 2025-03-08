@@ -14,7 +14,7 @@ const Home: React.FC = () => {
         <Login setToken={setToken} />
       ) : (
         <>
-          <Navbar setToken={setToken} />
+          <Navbar setToken={setToken} userId={userId!} />
           <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '20px' }}>
             <div style={{ marginBottom: '40px' }}>
               <h2>Rate a New Tea</h2>

@@ -1,11 +1,31 @@
-import React from 'react';
-import { logoutUser } from '../services/api';
+import React, { useEffect, useState } from 'react';
+import { logoutUser, getUser } from '../services/api';
 
 interface NavbarProps {
   setToken: (token: string | null) => void;
+  userId: number;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ setToken }) => {
+interface UserResponse {
+  name: string;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ setToken, userId }) => {
+  const [username, setUsername] = useState<string>("");
+
+  useEffect(() => {
+    const fetchUsername = async () => {
+      try {
+        const res = await getUser(userId);
+        const userData = res.data as UserResponse;
+        setUsername(userData.name);
+      } catch (error) {
+        console.error('Error fetching username:', error);
+      }
+    };
+    fetchUsername();
+  }, [userId]);
+
   const handleLogout = async () => {
     try {
       await logoutUser();
@@ -26,19 +46,22 @@ const Navbar: React.FC<NavbarProps> = ({ setToken }) => {
       marginBottom: '2rem'
     }}>
       <h1 style={{ margin: 0 }}>Tea Rater</h1>
-      <button
-        onClick={handleLogout}
-        style={{
-          padding: '0.5rem 1rem',
-          backgroundColor: '#dc3545',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer'
-        }}
-      >
-        Logout
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <span style={{ color: '#666' }}>Welcome, {username}!</span>
+        <button
+          onClick={handleLogout}
+          style={{
+            padding: '0.5rem 1rem',
+            backgroundColor: '#dc3545',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          Logout
+        </button>
+      </div>
     </nav>
   );
 };

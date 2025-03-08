@@ -64,6 +64,7 @@ func main() {
 	r.HandleFunc("/login", handleLogin).Methods("POST")
 	r.HandleFunc("/logout", handleLogout).Methods("POST")
 	r.HandleFunc("/user-ratings/{userId}", handleUserRatings).Methods("GET")
+	r.HandleFunc("/user/{userId}", handleGetUser).Methods("GET")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -324,4 +325,18 @@ func cleanupDuplicateUsers() {
 		// Delete the duplicate user
 		db.Unscoped().Delete(&user)
 	}
+}
+
+// Handle get user info
+func handleGetUser(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userId := vars["userId"]
+
+	var user User
+	if err := db.First(&user, userId).Error; err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"name": user.Name})
 }

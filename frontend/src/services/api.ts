@@ -27,6 +27,10 @@ export const getUserRatings = async (userId: number) => {
     return axios.get(`${API_BASE_URL}/user-ratings/${userId}`);
 };
 
+export const getUser = async (userId: number) => {
+    return axios.get(`${API_BASE_URL}/user/${userId}`);
+};
+
 export const submitRating = async (ratingData: object) => {
   return axios.post(`${API_BASE_URL}/submit`, { ...ratingData });
 };
