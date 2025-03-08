@@ -104,10 +104,19 @@ func handleRegisterUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user.Name = strings.ToLower(strings.TrimSpace(user.Name))
-	if err := db.Create(&user).Error; err != nil {
-		http.Error(w, "User already exists", http.StatusConflict)
+
+	// Check if username already exists
+	var existingUser User
+	if err := db.Where("name = ?", user.Name).First(&existingUser).Error; err == nil {
+		http.Error(w, "Username already exists", http.StatusConflict)
 		return
 	}
+
+	if err := db.Create(&user).Error; err != nil {
+		http.Error(w, "Failed to create user", http.StatusInternalServerError)
+		return
+	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful", "token": fmt.Sprintf("user-%d", user.ID)})
 }
