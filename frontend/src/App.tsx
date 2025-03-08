@@ -6,10 +6,10 @@ import Dashboard from "./pages/Dashboard";
 import Register from "./components/RegisterUser";
 
 const App: React.FC = () => {
-  const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
+  const [token, setToken] = useState<string | null>(localStorage.getItem("authToken"));
 
   const handleLogin = (newToken: string) => {
-    localStorage.setItem("token", newToken);
+    localStorage.setItem("authToken", newToken);
     setToken(newToken);
   };
   return (

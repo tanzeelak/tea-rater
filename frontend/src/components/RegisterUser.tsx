@@ -15,7 +15,7 @@ const Register: React.FC<RegisterProps> = ({ setToken }) => {
         const res: any = await registerUser(username);
         if (res.data.token) {
             setToken(res.data.token);
-            localStorage.setItem("token", res.data.token);
+            localStorage.setItem("authToken", res.data.token);
             navigate("/"); // Redirect to home after successful registration
         }
     } catch (error) {

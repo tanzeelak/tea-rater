@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { loginUser } from "../services/api";
-import axios from 'axios';
 
 interface LoginProps {
   setToken: (token: string) => void;
@@ -11,9 +10,9 @@ const Login: React.FC<LoginProps> = ({ setToken }) => {
 
   const handleLogin = async () => {
     try {
-    const res: any = await loginUser(username);
+      const res: any = await loginUser(username);
       setToken(res.data.token);
-      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("authToken", res.data.token);
     } catch (error) {
       alert("Login failed!");
     }
