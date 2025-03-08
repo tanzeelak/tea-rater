@@ -11,6 +11,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
   const [teaList, setTeaList] = useState<Tea[]>([]);
   const [teaId, setTeaId] = useState<number>(0);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
   const [rating, setRating] = useState<Rating>({
     id: 0,
     user_id: 0,
@@ -30,12 +31,21 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
   }, []);
 
   const handleSubmit = async () => {
+    if (teaId === 0) {
+      setShowError(true);
+      setTimeout(() => {
+        setShowError(false);
+      }, 3000);
+      return;
+    }
+
     rating.user_id = userId;
     rating.tea_id = teaId;
     await submitRating(rating);
     
     // Show success message
     setShowSuccess(true);
+    setShowError(false);
     
     // Reset form
     setTeaId(0);
@@ -78,7 +88,32 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId }) => {
           Rating submitted successfully!
         </div>
       )}
-      <select value={teaId} onChange={(e) => setTeaId(Number(e.target.value))}>
+      {showError && (
+        <div style={{
+          backgroundColor: '#f8d7da',
+          color: '#721c24',
+          padding: '1rem',
+          borderRadius: '4px',
+          marginBottom: '1rem',
+          textAlign: 'center'
+        }}>
+          Please select a tea before submitting!
+        </div>
+      )}
+      <select 
+        value={teaId} 
+        onChange={(e) => {
+          setTeaId(Number(e.target.value));
+          setShowError(false);
+        }}
+        style={{
+          border: showError ? '2px solid #dc3545' : '1px solid #ced4da',
+          borderRadius: '4px',
+          padding: '0.5rem',
+          marginBottom: '1rem',
+          width: '100%'
+        }}
+      >
         <option value="0">Select a Tea</option>
         {teaList.map((tea) => (
           <option key={tea.id} value={tea.id}>
