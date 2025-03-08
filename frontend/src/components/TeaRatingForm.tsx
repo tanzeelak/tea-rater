@@ -103,10 +103,50 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const { name, value } = e.target;
     setRating((prevRating) => ({ ...prevRating, [name]: parseFloat(value) }));
   };
+
+  const renderRatingSelect = (name: string, label: string, description: string) => (
+    <div style={{ 
+      marginBottom: '1.5rem',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: '2rem'
+    }}>
+      <div style={{ flex: 1, maxWidth: '300px' }}>
+        <div style={{ fontWeight: 500 }}>{label}:</div>
+        <div style={{ 
+          fontSize: '0.8rem', 
+          color: '#666',
+          marginTop: '0.25rem'
+        }}>
+          {description}
+        </div>
+      </div>
+      <select
+        name={name}
+        value={rating[name as keyof Rating]}
+        onChange={handleChange}
+        style={{
+          padding: '0.5rem',
+          borderRadius: '4px',
+          border: '1px solid #ced4da',
+          width: '100px',
+          flexShrink: 0
+        }}
+      >
+        <option value="0">Select...</option>
+        {[1, 2, 3, 4, 5].map((num) => (
+          <option key={num} value={num}>
+            {num}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
     <div>
@@ -144,8 +184,9 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
           border: showError ? '2px solid #dc3545' : '1px solid #ced4da',
           borderRadius: '4px',
           padding: '0.5rem',
-          marginBottom: '1rem',
-          width: '100%'
+          marginBottom: '2rem',
+          width: '50%',
+          maxWidth: '500px'
         }}
         disabled={!!editingRating}
       >
@@ -156,39 +197,31 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
           </option>
         ))}
       </select>
-      <div>
-        <label>Umami:</label>
-        <input type="number" name="umami" value={rating.umami} onChange={handleChange} />
+
+      <div style={{ marginBottom: '2rem' }}>
+        {renderRatingSelect('umami', 'Umami', 'Savory, brothy taste sensation')}
+        {renderRatingSelect('astringency', 'Astringency', 'Drying or puckering sensation')}
+        {renderRatingSelect('floral', 'Floral', 'Flower-like aromas and taste')}
+        {renderRatingSelect('vegetal', 'Vegetal', 'Fresh green, plant-like qualities')}
+        {renderRatingSelect('nutty', 'Nutty', 'Roasted nut characteristics')}
+        {renderRatingSelect('roasted', 'Roasted', 'Toasted, charred notes')}
+        {renderRatingSelect('body', 'Full-bodied', 'Thickness and weight in mouth')}
+        {renderRatingSelect('rating', 'Overall', 'Your overall impression')}
       </div>
-      <div>
-        <label>Astringency:</label>
-        <input type="number" name="astringency" value={rating.astringency} onChange={handleChange} />
-      </div>
-      <div>
-        <label>Floral:</label>
-        <input type="number" name="floral" value={rating.floral} onChange={handleChange} />
-      </div>
-      <div>
-        <label>Vegetal:</label>
-        <input type="number" name="vegetal" value={rating.vegetal} onChange={handleChange} />
-      </div>
-      <div>
-        <label>Nutty:</label>
-        <input type="number" name="nutty" value={rating.nutty} onChange={handleChange} />
-      </div>
-      <div>
-        <label>Roasted:</label>
-        <input type="number" name="roasted" value={rating.roasted} onChange={handleChange} />
-      </div>
-      <div>
-        <label>Body:</label>
-        <input type="number" name="body" value={rating.body} onChange={handleChange} />
-      </div>
-      <div>
-        <label>Rating:</label>
-        <input type="number" name="rating" value={rating.rating} onChange={handleChange} />
-      </div>
-      <button onClick={handleSubmit}>{editingRating ? 'Update Rating' : 'Submit Rating'}</button>
+
+      <button 
+        onClick={handleSubmit}
+        style={{
+          padding: '0.5rem 1rem',
+          backgroundColor: '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}
+      >
+        {editingRating ? 'Update Rating' : 'Submit Rating'}
+      </button>
     </div>
   );
 };

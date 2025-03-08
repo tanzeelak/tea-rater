@@ -38,96 +38,84 @@ const RegisterTea: React.FC<RegisterTeaProps> = ({ onTeaRegistered }) => {
   };
 
   return (
-    <div style={{ marginBottom: '2rem' }}>
+    <div style={{
+      position: 'absolute',
+      top: '100%',
+      right: '0',
+      marginTop: '0.5rem',
+      zIndex: 1000,
+      backgroundColor: 'white',
+      boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+      borderRadius: '4px',
+      padding: '1.5rem',
+      minWidth: '300px'
+    }}>
+      {showSuccess && (
+        <div style={{
+          backgroundColor: '#d4edda',
+          color: '#155724',
+          padding: '1rem',
+          borderRadius: '4px',
+          marginBottom: '1rem',
+          textAlign: 'center'
+        }}>
+          Tea registered successfully!
+        </div>
+      )}
+      {showError && (
+        <div style={{
+          backgroundColor: '#f8d7da',
+          color: '#721c24',
+          padding: '1rem',
+          borderRadius: '4px',
+          marginBottom: '1rem',
+          textAlign: 'center'
+        }}>
+          Please fill in all fields
+        </div>
+      )}
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Tea Name:</label>
+        <input
+          type="text"
+          value={teaName}
+          onChange={(e) => setTeaName(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '0.5rem',
+            borderRadius: '4px',
+            border: '1px solid #ced4da'
+          }}
+        />
+      </div>
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Provider:</label>
+        <input
+          type="text"
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '0.5rem',
+            borderRadius: '4px',
+            border: '1px solid #ced4da'
+          }}
+        />
+      </div>
       <button
-        onClick={() => setIsFormVisible(!isFormVisible)}
+        onClick={handleSubmit}
         style={{
           padding: '0.5rem 1rem',
-          backgroundColor: '#28a745',
+          backgroundColor: '#007bff',
           color: 'white',
           border: 'none',
           borderRadius: '4px',
           cursor: 'pointer',
-          marginBottom: '1rem'
+          width: '100%'
         }}
       >
-        {isFormVisible ? 'Hide Tea Registration' : 'Register New Tea'}
+        Register Tea
       </button>
-
-      {isFormVisible && (
-        <div style={{
-          backgroundColor: '#f8f9fa',
-          padding: '1rem',
-          borderRadius: '4px',
-          marginTop: '1rem'
-        }}>
-          {showSuccess && (
-            <div style={{
-              backgroundColor: '#d4edda',
-              color: '#155724',
-              padding: '1rem',
-              borderRadius: '4px',
-              marginBottom: '1rem',
-              textAlign: 'center'
-            }}>
-              Tea registered successfully!
-            </div>
-          )}
-          {showError && (
-            <div style={{
-              backgroundColor: '#f8d7da',
-              color: '#721c24',
-              padding: '1rem',
-              borderRadius: '4px',
-              marginBottom: '1rem',
-              textAlign: 'center'
-            }}>
-              Please fill in all fields
-            </div>
-          )}
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Tea Name:</label>
-            <input
-              type="text"
-              value={teaName}
-              onChange={(e) => setTeaName(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                borderRadius: '4px',
-                border: '1px solid #ced4da'
-              }}
-            />
-          </div>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem' }}>Provider:</label>
-            <input
-              type="text"
-              value={provider}
-              onChange={(e) => setProvider(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem',
-                borderRadius: '4px',
-                border: '1px solid #ced4da'
-              }}
-            />
-          </div>
-          <button
-            onClick={handleSubmit}
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Register Tea
-          </button>
-        </div>
-      )}
     </div>
   );
 };
