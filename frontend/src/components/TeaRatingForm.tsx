@@ -185,7 +185,6 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
           borderRadius: '4px',
           padding: '0.5rem',
           marginBottom: '2rem',
-          width: '50%',
           maxWidth: '500px'
         }}
         disabled={!!editingRating}
