@@ -18,6 +18,10 @@ export const getTeas = async () => {
   return axios.get(`${API_BASE_URL}/teas`);
 };
 
+export const registerTea = async (teaName: string, provider: string) => {
+  return axios.post(`${API_BASE_URL}/register-tea`, { tea_name: teaName, provider });
+};
+
 export const getRatings = async () => {
     return axios.get(`${API_BASE_URL}/ratings`);
 };

@@ -6,9 +6,15 @@ interface TeaRatingFormProps {
   userId: number;
   editingRating?: Rating | null;
   onEditComplete?: () => void;
+  refreshTrigger?: number;
 }
 
-const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId, editingRating = null, onEditComplete }) => {
+const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ 
+  userId, 
+  editingRating = null, 
+  onEditComplete,
+  refreshTrigger = 0 
+}) => {
   const [teaList, setTeaList] = useState<Tea[]>([]);
   const [teaId, setTeaId] = useState<number>(editingRating?.tea_id || 0);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -29,7 +35,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({ userId, editingRating = n
 
   useEffect(() => {
     getTeas().then((res) => setTeaList(res.data as Tea[]));
-  }, []);
+  }, [refreshTrigger]);
 
   useEffect(() => {
     if (editingRating) {

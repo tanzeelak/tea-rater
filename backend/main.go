@@ -55,6 +55,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/teas", handleTeas).Methods("GET")
+	r.HandleFunc("/register-tea", handleRegisterTea).Methods("POST")
 	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
@@ -348,4 +349,36 @@ func handleGetUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(map[string]string{"name": user.Name})
+}
+
+// Handle registering a new tea
+func handleRegisterTea(w http.ResponseWriter, r *http.Request) {
+	var tea Tea
+	if err := json.NewDecoder(r.Body).Decode(&tea); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tea.TeaName = strings.TrimSpace(tea.TeaName)
+	tea.Provider = strings.TrimSpace(tea.Provider)
+
+	if tea.TeaName == "" || tea.Provider == "" {
+		http.Error(w, "Tea name and provider are required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if tea with same name and provider already exists
+	var existingTea Tea
+	if err := db.Where("tea_name = ? AND provider = ?", tea.TeaName, tea.Provider).First(&existingTea).Error; err == nil {
+		http.Error(w, "Tea already exists", http.StatusConflict)
+		return
+	}
+
+	if err := db.Create(&tea).Error; err != nil {
+		http.Error(w, "Failed to create tea", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(tea)
 }
