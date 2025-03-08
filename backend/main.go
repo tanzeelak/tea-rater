@@ -61,6 +61,8 @@ func main() {
 	r.HandleFunc("/summary", handleSummary).Methods("GET")
 	r.HandleFunc("/dashboard", handleDashboard).Methods("GET")
 	r.HandleFunc("/login", handleLogin).Methods("POST")
+	r.HandleFunc("/logout", handleLogout).Methods("POST")
+	r.HandleFunc("/user-ratings/{userId}", handleUserRatings).Methods("GET")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -264,4 +266,30 @@ func handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	// TODO: Statistics
 	return
+}
+
+// Handle retrieve user-specific ratings
+func handleUserRatings(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	userId := vars["userId"]
+	fmt.Println("User ID:", userId)
+
+	var ratings []struct {
+		TeaRating
+		TeaName string `json:"tea_name"`
+	}
+
+	db.Table("tea_ratings").
+		Select("tea_ratings.*, teas.tea_name").
+		Joins("JOIN teas ON tea_ratings.tea_id = teas.id").
+		Where("tea_ratings.user_id = ?", userId).
+		Scan(&ratings)
+
+	json.NewEncoder(w).Encode(ratings)
+}
+
+// Handle user logout
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Logged out successfully"})
 }

@@ -6,9 +6,13 @@ export const loginUser = async (username: string) => {
   return axios.post(`${API_BASE_URL}/login`, { username });
 };
 
+export const logoutUser = async () => {
+  return axios.post(`${API_BASE_URL}/logout`);
+};
+
 export const registerUser = async (username: string) => {
   return axios.post(`${API_BASE_URL}/register-user`, { "name": username });
-}
+};
 
 export const getTeas = async () => {
   return axios.get(`${API_BASE_URL}/teas`);
@@ -18,6 +22,10 @@ export const getRatings = async () => {
     return axios.get(`${API_BASE_URL}/ratings`);
 };
 
+export const getUserRatings = async (userId: number) => {
+    console.log(userId);
+    return axios.get(`${API_BASE_URL}/user-ratings/${userId}`);
+};
 
 export const submitRating = async (ratingData: object) => {
   return axios.post(`${API_BASE_URL}/submit`, { ...ratingData });
