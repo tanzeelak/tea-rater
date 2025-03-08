@@ -203,7 +203,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
         {renderRatingSelect('astringency', 'Astringency', 'Drying or puckering sensation')}
         {renderRatingSelect('floral', 'Floral', 'Flower-like aromas and taste')}
         {renderRatingSelect('vegetal', 'Vegetal', 'Fresh green, plant-like qualities')}
-        {renderRatingSelect('nutty', 'Nutty', 'Roasted nut characteristics')}
+        {renderRatingSelect('nutty', 'Nuttiness', 'Nutty characteristics')}
         {renderRatingSelect('roasted', 'Roasted', 'Toasted, charred notes')}
         {renderRatingSelect('body', 'Full-bodied', 'Thickness and weight in mouth')}
         {renderRatingSelect('rating', 'Overall', 'Your overall impression')}

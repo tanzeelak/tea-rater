@@ -74,7 +74,7 @@ const UserRatings: React.FC<UserRatingsProps> = ({ userId }) => {
           <thead>
             <tr>
               <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #ddd' }}>Tea Name</th>
-              <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Rating</th>
+              <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Overall</th>
               <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Umami</th>
               <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Astringency</th>
               <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #ddd' }}>Floral</th>
