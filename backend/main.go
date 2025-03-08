@@ -17,6 +17,7 @@ type Tea struct {
 	ID       uint   `json:"id" gorm:"primaryKey"`
 	TeaName  string `json:"tea_name"`
 	Provider string `json:"provider"`
+	Source   string `json:"source"`
 }
 
 type User struct {

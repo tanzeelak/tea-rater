@@ -193,7 +193,7 @@ const TeaRatingForm: React.FC<TeaRatingFormProps> = ({
         <option value="0">Select a Tea</option>
         {teaList.map((tea) => (
           <option key={tea.id} value={tea.id}>
-            {tea.tea_name} ({tea.provider})
+            {tea.tea_name}
           </option>
         ))}
       </select>

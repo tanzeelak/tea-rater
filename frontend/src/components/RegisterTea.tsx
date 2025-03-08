@@ -8,6 +8,7 @@ interface RegisterTeaProps {
 const RegisterTea: React.FC<RegisterTeaProps> = ({ onTeaRegistered }) => {
   const [teaName, setTeaName] = useState('');
   const [provider, setProvider] = useState('');
+  const [source, setSource] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [isFormVisible, setIsFormVisible] = useState(false);
@@ -24,6 +25,7 @@ const RegisterTea: React.FC<RegisterTeaProps> = ({ onTeaRegistered }) => {
       setShowSuccess(true);
       setTeaName('');
       setProvider('');
+      setSource('');
       onTeaRegistered();
       
       setTimeout(() => {
@@ -80,6 +82,20 @@ const RegisterTea: React.FC<RegisterTeaProps> = ({ onTeaRegistered }) => {
           type="text"
           value={teaName}
           onChange={(e) => setTeaName(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '0.5rem',
+            borderRadius: '4px',
+            border: '1px solid #ced4da'
+          }}
+        />
+      </div>
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', marginBottom: '0.5rem' }}>Source:</label>
+        <input
+          type="text"
+          value={source}
+          onChange={(e) => setSource(e.target.value)}
           style={{
             width: '100%',
             padding: '0.5rem',
