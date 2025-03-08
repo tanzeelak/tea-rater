@@ -50,6 +50,7 @@ func main() {
 	db.AutoMigrate(&TeaRating{})
 	db.AutoMigrate(&User{})
 	initializeTeas()
+	cleanupDuplicateUsers()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
@@ -292,4 +293,35 @@ func handleUserRatings(w http.ResponseWriter, r *http.Request) {
 func handleLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Logged out successfully"})
+}
+
+// Clean up duplicate users
+func cleanupDuplicateUsers() {
+	// First, get all users with duplicate names
+	var duplicateUsers []User
+	db.Raw(`
+		WITH DuplicateNames AS (
+			SELECT Name, MIN(ID) as MinID
+			FROM users
+			GROUP BY Name
+			HAVING COUNT(*) > 1
+		)
+		SELECT u.*
+		FROM users u
+		JOIN DuplicateNames d ON u.Name = d.Name
+		WHERE u.ID > d.MinID
+	`).Scan(&duplicateUsers)
+
+	// Delete the duplicates (keeping the first instance)
+	for _, user := range duplicateUsers {
+		// Update ratings to point to the first instance of this user
+		var firstUser User
+		db.Where("name = ?", user.Name).Order("id asc").First(&firstUser)
+
+		// Update any ratings from the duplicate user to point to the first instance
+		db.Model(&TeaRating{}).Where("user_id = ?", user.ID).Update("user_id", firstUser.ID)
+
+		// Delete the duplicate user
+		db.Unscoped().Delete(&user)
+	}
 }
