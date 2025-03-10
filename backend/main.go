@@ -77,6 +77,7 @@ func main() {
 	cleanupDuplicateUsers()
 
 	r := mux.NewRouter()
+	r.HandleFunc("/", handleRoot).Methods("GET")
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/teas", handleTeas).Methods("GET")
 	r.HandleFunc("/register-tea", handleRegisterTea).Methods("POST")
@@ -119,6 +120,11 @@ func initializeTeas() {
 		db.Create(&teas)
 		fmt.Println("Initialized database with sample teas.")
 	}
+}
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "I'm here"})
 }
 
 // Handle new user registration
