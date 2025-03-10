@@ -1,1 +1,1 @@
-web: cd backend && go build -o main && ./main
+web: cd backend && go build -o main . && ./main
