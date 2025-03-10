@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/joho/godotenv"
 	"github.com/rs/cors"
-	"gorm.io/driver/sqlite"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
@@ -41,15 +43,36 @@ type TeaRating struct {
 
 var db *gorm.DB
 
+func init() {
+	// Load .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file found or error loading it: %v", err)
+	}
+}
+
 func main() {
 	var err error
-	db, err = gorm.Open(sqlite.Open("ratings.db"), &gorm.Config{})
-	if err != nil {
-		log.Fatal("Failed to connect database")
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		log.Fatal("DATABASE_URL environment variable is required")
 	}
-	db.AutoMigrate(&Tea{})
-	db.AutoMigrate(&TeaRating{})
-	db.AutoMigrate(&User{})
+
+	// Append SSL mode if not already in the connection string
+	if !strings.Contains(dsn, "sslmode=") {
+		dsn += "?sslmode=require"
+	}
+
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		log.Fatal("Failed to connect database:", err)
+	}
+
+	// Run migrations
+	if err := db.AutoMigrate(&Tea{}, &TeaRating{}, &User{}); err != nil {
+		log.Fatal("Failed to migrate database:", err)
+	}
+
+	// Initialize sample data
 	initializeTeas()
 	cleanupDuplicateUsers()
 
