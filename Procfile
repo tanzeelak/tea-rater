@@ -1,1 +1,1 @@
-web: tea-rater-api
+web: bin/tea-rater
