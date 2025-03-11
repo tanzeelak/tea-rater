@@ -51,6 +51,15 @@ func init() {
 }
 
 func main() {
+	// Use LookupEnv to check if the variable exists
+	dbURL, exists := os.LookupEnv("DATABASE_URL")
+
+	if !exists {
+		log.Fatal("DATABASE_URL is not set in Go")
+	} else {
+		fmt.Println("DATABASE_URL found:", dbURL)
+	}
+
 	var err error
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
