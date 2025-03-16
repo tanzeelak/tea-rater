@@ -122,18 +122,18 @@ func main() {
 func initializeTeas() {
 	existingCount := int64(0)
 	db.Model(&Tea{}).Count(&existingCount)
-	if existingCount == 0 {
-		teas := []Tea{
-			{TeaName: "Dragonwell", Provider: "Clovis"},
-			{TeaName: "Yun Wu", Provider: "Tanzeela"},
-			{TeaName: "Laoshan", Provider: "Itsi"},
-			{TeaName: "Kamairicha", Provider: "Tanzeela"},
-			{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
-			{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
-		}
-		db.Create(&teas)
-		fmt.Println("Initialized database with sample teas.")
-	}
+	// if existingCount == 0 {
+	// 	teas := []Tea{
+	// 		{TeaName: "Dragonwell", Provider: "Clovis"},
+	// 		{TeaName: "Yun Wu", Provider: "Tanzeela"},
+	// 		{TeaName: "Laoshan", Provider: "Itsi"},
+	// 		{TeaName: "Kamairicha", Provider: "Tanzeela"},
+	// 		{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
+	// 		{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
+	// 	}
+	// 	db.Create(&teas)
+	// 	fmt.Println("Initialized database with sample teas.")
+	// }
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
