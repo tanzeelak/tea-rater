@@ -106,6 +106,7 @@ func main() {
 	r.HandleFunc("/user-ratings/{userId}", handleUserRatings).Methods("GET")
 	r.HandleFunc("/user/{userId}", handleGetUser).Methods("GET")
 	r.HandleFunc("/drop-teas", handleDropTeas).Methods("POST")
+	r.HandleFunc("/seed-teas", handleSeedTeas).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -123,23 +124,6 @@ func main() {
 
 	fmt.Println("Server running on port:", port)
 	log.Fatal(http.ListenAndServe(":"+port, handler))
-}
-
-func initializeTeas() {
-	existingCount := int64(0)
-	db.Model(&Tea{}).Count(&existingCount)
-	if existingCount == 0 {
-		teas := []Tea{
-			{TeaName: "Dragonwell", Provider: "Clovis"},
-			{TeaName: "Yun Wu", Provider: "Tanzeela"},
-			{TeaName: "Laoshan", Provider: "Itsi"},
-			{TeaName: "Kamairicha", Provider: "Tanzeela"},
-			{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
-			{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
-		}
-		db.Create(&teas)
-		fmt.Println("Initialized database with sample teas.")
-	}
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
@@ -500,4 +484,38 @@ func handleDropTeas(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "All teas and ratings have been deleted"})
+}
+
+// Handle seeding sample teas
+func handleSeedTeas(w http.ResponseWriter, r *http.Request) {
+	teas := []Tea{
+		{TeaName: "Dragonwell", Provider: "Clovis"},
+		{TeaName: "Yun Wu", Provider: "Tanzeela"},
+		{TeaName: "Laoshan", Provider: "Itsi"},
+		{TeaName: "Kamairicha", Provider: "Tanzeela"},
+		{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
+		{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
+	}
+
+	// Begin transaction
+	tx := db.Begin()
+
+	// Create all teas
+	if err := tx.Create(&teas).Error; err != nil {
+		tx.Rollback()
+		http.Error(w, "Failed to seed teas", http.StatusInternalServerError)
+		return
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message": "Sample teas have been seeded",
+		"teas":    teas,
+	})
 }
