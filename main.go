@@ -60,30 +60,35 @@ func main() {
 		fmt.Println("DATABASE_URL found:", dbURL)
 	}
 
-	var err error
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
 		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
-	// Append SSL mode if not already in the connection string
-	if !strings.Contains(dsn, "sslmode=") {
-		dsn += "?sslmode=require"
-	}
-
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	var err error
+	// Configure database connection
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+		PrepareStmt:                              false,
+		DisableForeignKeyConstraintWhenMigrating: true,
+	})
 	if err != nil {
 		log.Fatal("Failed to connect database:", err)
 	}
 
-	// Run migrations
-	if err := db.AutoMigrate(&Tea{}, &TeaRating{}, &User{}); err != nil {
-		log.Fatal("Failed to migrate database:", err)
+	// Get underlying SQL DB to configure pool settings
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatal("Failed to get database instance:", err)
 	}
 
-	// Initialize sample data
-	initializeTeas()
-	cleanupDuplicateUsers()
+	// Set connection pool settings
+	sqlDB.SetMaxIdleConns(2)
+	sqlDB.SetMaxOpenConns(5)
+
+	// Run migrations
+	if err := db.AutoMigrate(&Tea{}, &TeaRating{}, &User{}); err != nil {
+		log.Printf("Migration warning: %v", err)
+	}
 
 	r := mux.NewRouter()
 	r.HandleFunc("/", handleRoot).Methods("GET")
@@ -100,6 +105,7 @@ func main() {
 	r.HandleFunc("/logout", handleLogout).Methods("POST")
 	r.HandleFunc("/user-ratings/{userId}", handleUserRatings).Methods("GET")
 	r.HandleFunc("/user/{userId}", handleGetUser).Methods("GET")
+	r.HandleFunc("/drop-teas", handleDropTeas).Methods("POST")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins:   []string{"*"},
@@ -124,12 +130,12 @@ func initializeTeas() {
 	db.Model(&Tea{}).Count(&existingCount)
 	if existingCount == 0 {
 		teas := []Tea{
-			// 		{TeaName: "Dragonwell", Provider: "Clovis"},
-			// 		{TeaName: "Yun Wu", Provider: "Tanzeela"},
-			// 		{TeaName: "Laoshan", Provider: "Itsi"},
-			// 		{TeaName: "Kamairicha", Provider: "Tanzeela"},
-			// 		{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
-			// 		{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
+			{TeaName: "Dragonwell", Provider: "Clovis"},
+			{TeaName: "Yun Wu", Provider: "Tanzeela"},
+			{TeaName: "Laoshan", Provider: "Itsi"},
+			{TeaName: "Kamairicha", Provider: "Tanzeela"},
+			{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
+			{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
 		}
 		db.Create(&teas)
 		fmt.Println("Initialized database with sample teas.")
@@ -465,4 +471,33 @@ func handleRegisterTea(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(tea)
+}
+
+// Handle dropping all teas and their ratings
+func handleDropTeas(w http.ResponseWriter, r *http.Request) {
+	// Begin transaction
+	tx := db.Begin()
+
+	// Delete all tea ratings first (due to foreign key constraints)
+	if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TeaRating{}).Error; err != nil {
+		tx.Rollback()
+		http.Error(w, "Failed to delete tea ratings", http.StatusInternalServerError)
+		return
+	}
+
+	// Delete all teas
+	if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Tea{}).Error; err != nil {
+		tx.Rollback()
+		http.Error(w, "Failed to delete teas", http.StatusInternalServerError)
+		return
+	}
+
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "All teas and ratings have been deleted"})
 }

@@ -1,12 +1,14 @@
 # tea-rater
 
-Backend
-`cd backend`
+## Start Server
 `go run main.go`
 
-Database
-`cd backend`
-`sqlite3 ratings.db`
+## Database
+`psql tea_rater`
+Get all tables
+`\dt`
+Get all teas
+`select * from teas`
 
 Heroku Deploy
 * Use IP4 for server connection
