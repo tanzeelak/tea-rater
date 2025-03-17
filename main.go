@@ -23,8 +23,8 @@ type Tea struct {
 }
 
 type User struct {
-	ID   uint
-	Name string
+	ID   uint   `json:"id" gorm:"primaryKey"`
+	Name string `json:"name"`
 }
 
 type TeaRating struct {
@@ -159,16 +159,16 @@ func handleRegisterUser(w http.ResponseWriter, r *http.Request) {
 // Handle user login
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Username string `json:"username"`
+		Name string `json:"name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	username := strings.ToLower(strings.TrimSpace(request.Username))
+	name := strings.ToLower(strings.TrimSpace(request.Name))
 	var user User
-	if err := db.Where("name = ?", username).First(&user).Error; err != nil {
+	if err := db.Where("name = ?", name).First(&user).Error; err != nil {
 		http.Error(w, "User not found", http.StatusUnauthorized)
 		return
 	}
