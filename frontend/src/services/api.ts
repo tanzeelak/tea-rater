@@ -18,8 +18,16 @@ export const getTeas = (userId: number) => {
   return axios.get(`${API_BASE_URL}/teas?user_id=${userId}`);
 };
 
-export const registerTea = async (teaName: string, provider: string) => {
-  return axios.post(`${API_BASE_URL}/register-tea`, { tea_name: teaName, provider });
+export const getAllTeas = () => {
+  return axios.get(`${API_BASE_URL}/all-teas`);
+};
+
+export const registerTea = async (teaName: string, provider: string, source?: string) => {
+  return axios.post(`${API_BASE_URL}/register-tea`, { 
+    tea_name: teaName, 
+    provider,
+    source: source || ""
+  });
 };
 
 export const getRatings = async () => {
@@ -51,4 +59,12 @@ export const getAdminData = async (token: string) => {
   return axios.get(`${API_BASE_URL}/dashboard`, {
     headers: { Authorization: token },
   });
+};
+
+export const createTasting = async (name: string) => {
+  return axios.post(`${API_BASE_URL}/create-tasting`, { name });
+};
+
+export const getTastings = async () => {
+  return axios.get(`${API_BASE_URL}/tastings`);
 };

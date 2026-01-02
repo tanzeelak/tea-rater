@@ -27,10 +27,16 @@ type User struct {
 	Name string
 }
 
+type TeaTasting struct {
+	ID   uint   `json:"id" gorm:"primaryKey"`
+	Name string `json:"name"`
+}
+
 type TeaRating struct {
 	ID          uint    `json:"id" gorm:"primaryKey"`
 	UserID      uint    `json:"user_id" gorm:"foreignKey"`
 	TeaID       uint    `json:"tea_id" gorm:"foreignKey"`
+	TastingID   uint    `json:"tasting_id" gorm:"foreignKey"`
 	Umami       float64 `json:"umami"`
 	Astringency float64 `json:"astringency"`
 	Floral      float64 `json:"floral"`
@@ -68,18 +74,22 @@ func main() {
 	}
 
 	// Run migrations
-	if err := db.AutoMigrate(&Tea{}, &TeaRating{}, &User{}); err != nil {
+	if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}); err != nil {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
 	// Initialize sample data
 	initializeTeas()
+	initializeDefaultTasting()
 	cleanupDuplicateUsers()
 
 	r := mux.NewRouter()
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/teas", handleTeas).Methods("GET")
+	r.HandleFunc("/all-teas", handleAllTeas).Methods("GET")
 	r.HandleFunc("/register-tea", handleRegisterTea).Methods("POST")
+	r.HandleFunc("/create-tasting", handleCreateTasting).Methods("POST")
+	r.HandleFunc("/tastings", handleTastings).Methods("GET")
 	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
@@ -118,6 +128,31 @@ func initializeTeas() {
 		}
 		db.Create(&teas)
 		fmt.Println("Initialized database with sample teas.")
+	}
+}
+
+func initializeDefaultTasting() {
+	// Check if there's a default tasting already
+	var defaultTasting TeaTasting
+	if err := db.Where("name = ?", "Tea Tasting Session").First(&defaultTasting).Error; err != nil {
+		// Create default tasting if it doesn't exist
+		defaultTasting = TeaTasting{
+			Name: "Tea Tasting Session",
+		}
+		db.Create(&defaultTasting)
+		fmt.Println("Created default tea tasting session.")
+	}
+
+	// Update any tea ratings that don't have a tasting_id to point to the default tasting
+	var ratingsWithoutTasting []TeaRating
+	db.Where("tasting_id = ? OR tasting_id IS NULL", 0).Find(&ratingsWithoutTasting)
+	
+	if len(ratingsWithoutTasting) > 0 {
+		for _, rating := range ratingsWithoutTasting {
+			rating.TastingID = defaultTasting.ID
+			db.Save(&rating)
+		}
+		fmt.Printf("Updated %d ratings to default tasting session.\n", len(ratingsWithoutTasting))
 	}
 }
 
@@ -185,6 +220,23 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If no tasting ID provided, use the default tasting
+	if rating.TastingID == 0 {
+		var defaultTasting TeaTasting
+		if err := db.Where("name = ?", "Tea Tasting Session").First(&defaultTasting).Error; err != nil {
+			http.Error(w, "Default tasting session not found", http.StatusInternalServerError)
+			return
+		}
+		rating.TastingID = defaultTasting.ID
+	} else {
+		// Validate that the tasting exists
+		var existingTasting TeaTasting
+		if err := db.Where("id = ?", rating.TastingID).First(&existingTasting).Error; err != nil {
+			http.Error(w, "Tasting ID does not exist", http.StatusNotFound)
+			return
+		}
+	}
+
 	db.Create(&rating)
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(rating)
@@ -242,6 +294,80 @@ func handleTeas(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+// Handle retrieve all teas (regardless of rating status)
+func handleAllTeas(w http.ResponseWriter, r *http.Request) {
+	var teas []Tea
+	db.Find(&teas)
+
+	// Create response with display format
+	type TeaResponse struct {
+		ID       uint   `json:"id"`
+		TeaName  string `json:"tea_name"`
+		Provider string `json:"provider"`
+		Source   string `json:"source"`
+		Display  string `json:"display"`
+	}
+
+	var response []TeaResponse
+	for _, tea := range teas {
+		displayStr := tea.TeaName
+		if tea.Source != "" {
+			displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
+		}
+		response = append(response, TeaResponse{
+			ID:       tea.ID,
+			TeaName:  tea.TeaName,
+			Provider: tea.Provider,
+			Source:   tea.Source,
+			Display:  displayStr,
+		})
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// Handle creating a new tasting session
+func handleCreateTasting(w http.ResponseWriter, r *http.Request) {
+	var tasting TeaTasting
+	if err := json.NewDecoder(r.Body).Decode(&tasting); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tasting.Name = strings.TrimSpace(tasting.Name)
+	if tasting.Name == "" {
+		http.Error(w, "Tasting name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if tasting with same name already exists
+	var existingTasting TeaTasting
+	if err := db.Where("name = ?", tasting.Name).First(&existingTasting).Error; err == nil {
+		http.Error(w, "Tasting with this name already exists", http.StatusConflict)
+		return
+	}
+
+	if err := db.Create(&tasting).Error; err != nil {
+		http.Error(w, "Failed to create tasting", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(tasting)
+}
+
+// Handle getting all tastings
+func handleTastings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var tastings []TeaTasting
+	if err := db.Find(&tastings).Error; err != nil {
+		http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(tastings)
 }
 
 // Handle editing existing ratings
