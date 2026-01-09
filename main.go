@@ -27,10 +27,16 @@ type User struct {
 	Name string `json:"name"`
 }
 
+type TeaTasting struct {
+	ID   uint   `json:"id" gorm:"primaryKey"`
+	Name string `json:"name"`
+}
+
 type TeaRating struct {
 	ID          uint    `json:"id" gorm:"primaryKey"`
 	UserID      uint    `json:"user_id" gorm:"foreignKey"`
 	TeaID       uint    `json:"tea_id" gorm:"foreignKey"`
+	TastingID   uint    `json:"tasting_id" gorm:"foreignKey"`
 	Umami       float64 `json:"umami"`
 	Astringency float64 `json:"astringency"`
 	Floral      float64 `json:"floral"`
@@ -86,7 +92,7 @@ func main() {
 	sqlDB.SetMaxOpenConns(5)
 
 	// Run migrations
-	if err := db.AutoMigrate(&Tea{}, &TeaRating{}, &User{}); err != nil {
+	if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}); err != nil {
 		log.Printf("Migration warning: %v", err)
 	}
 
@@ -94,8 +100,11 @@ func main() {
 	r.HandleFunc("/", handleRoot).Methods("GET")
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/teas", handleTeas).Methods("GET")
+	r.HandleFunc("/all-teas", handleAllTeas).Methods("GET")
 	r.HandleFunc("/register-tea", handleRegisterTea).Methods("POST")
 	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
+	r.HandleFunc("/create-tasting", handleCreateTasting).Methods("POST")
+	r.HandleFunc("/tastings", handleTastings).Methods("GET")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
 	r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")
@@ -252,6 +261,79 @@ func handleTeas(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	json.NewEncoder(w).Encode(response)
+}
+
+func handleAllTeas(w http.ResponseWriter, r *http.Request) {
+	var teas []Tea
+	db.Find(&teas)
+
+	// Create response with display format
+	type TeaResponse struct {
+		ID       uint   `json:"id"`
+		TeaName  string `json:"tea_name"`
+		Provider string `json:"provider"`
+		Source   string `json:"source"`
+		Display  string `json:"display"`
+	}
+
+	var response []TeaResponse
+	for _, tea := range teas {
+		displayStr := tea.TeaName
+		if tea.Source != "" {
+			displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
+		}
+		response = append(response, TeaResponse{
+			ID:       tea.ID,
+			TeaName:  tea.TeaName,
+			Provider: tea.Provider,
+			Source:   tea.Source,
+			Display:  displayStr,
+		})
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// Handle creating a new tasting session
+func handleCreateTasting(w http.ResponseWriter, r *http.Request) {
+	var tasting TeaTasting
+	if err := json.NewDecoder(r.Body).Decode(&tasting); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tasting.Name = strings.TrimSpace(tasting.Name)
+	if tasting.Name == "" {
+		http.Error(w, "Tasting name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Check if tasting with same name already exists
+	var existingTasting TeaTasting
+	if err := db.Where("name = ?", tasting.Name).First(&existingTasting).Error; err == nil {
+		http.Error(w, "Tasting with this name already exists", http.StatusConflict)
+		return
+	}
+
+	if err := db.Create(&tasting).Error; err != nil {
+		http.Error(w, "Failed to create tasting", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(tasting)
+}
+
+// Handle getting all tastings
+func handleTastings(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var tastings []TeaTasting
+	if err := db.Find(&tastings).Error; err != nil {
+		http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(tastings)
 }
 
 // Handle editing existing ratings
