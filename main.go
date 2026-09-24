@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,9 +18,9 @@ import (
 
 type Tea struct {
 	ID       uint   `json:"id" gorm:"primaryKey"`
-	TeaName  string `json:"tea_name"`
+	TeaName  string `json:"tea_name" gorm:"uniqueIndex:idx_teas_source_tea_name,priority:2"`
 	Provider string `json:"provider"`
-	Source   string `json:"source"`
+	Source   string `json:"source" gorm:"uniqueIndex:idx_teas_source_tea_name,priority:1"`
 }
 
 type User struct {
@@ -67,6 +68,7 @@ func main() {
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
 		PrepareStmt:                              false,
 		DisableForeignKeyConstraintWhenMigrating: true,
+		TranslateError:                           true,
 	})
 	if err != nil {
 		log.Fatal("Failed to connect database:", err)
@@ -508,20 +510,25 @@ func handleRegisterTea(w http.ResponseWriter, r *http.Request) {
 
 	tea.TeaName = strings.TrimSpace(tea.TeaName)
 	tea.Provider = strings.TrimSpace(tea.Provider)
+	tea.Source = strings.TrimSpace(tea.Source)
 
 	if tea.TeaName == "" || tea.Provider == "" {
 		http.Error(w, "Tea name and provider are required", http.StatusBadRequest)
 		return
 	}
 
-	// Check if tea with same name and provider already exists
+	// Check if a tea with the same source and name already exists.
 	var existingTea Tea
-	if err := db.Where("tea_name = ? AND provider = ?", tea.TeaName, tea.Provider).First(&existingTea).Error; err == nil {
+	if err := db.Where("source = ? AND tea_name = ?", tea.Source, tea.TeaName).First(&existingTea).Error; err == nil {
 		http.Error(w, "Tea already exists", http.StatusConflict)
 		return
 	}
 
 	if err := db.Create(&tea).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			http.Error(w, "Tea already exists", http.StatusConflict)
+			return
+		}
 		http.Error(w, "Failed to create tea", http.StatusInternalServerError)
 		return
 	}
