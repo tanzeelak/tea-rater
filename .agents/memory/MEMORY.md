@@ -1,1 +1,2 @@
 - [Go package callback limitation](go-package-install.md) — the package installer may reject Go despite documenting it; use the installed Go toolchain for dependency updates.
+- [Heroku app identity](heroku-app-identity.md) — the public herokuapp.com hostname suffix need not be the Git app name; verify the app identity before configuring a remote.
