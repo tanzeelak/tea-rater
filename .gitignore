@@ -2,4 +2,7 @@
 *.env
 *.db
 bin/
+tea-rater
+*.test
+*.out
 .prod-env

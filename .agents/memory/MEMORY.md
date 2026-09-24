@@ -1,0 +1,1 @@
+- [Go package callback limitation](go-package-install.md) — the package installer may reject Go despite documenting it; use the installed Go toolchain for dependency updates.
