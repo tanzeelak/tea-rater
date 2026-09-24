@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/gorilla/mux"
@@ -98,6 +99,8 @@ func main() {
 	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
 	r.HandleFunc("/create-tasting", handleCreateTasting).Methods("POST")
 	r.HandleFunc("/tastings", handleTastings).Methods("GET")
+	r.HandleFunc("/tastings/{tastingId}/teas/{teaId}", handleUnlinkTeaFromTasting).Methods("DELETE")
+	r.HandleFunc("/teas/{id}", handleDeleteTea).Methods("DELETE")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
 	r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")
@@ -327,6 +330,84 @@ func handleTastings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(tastings)
+}
+
+func parsePositiveID(value string) (uint, bool) {
+	id, err := strconv.ParseUint(value, 10, strconv.IntSize)
+	return uint(id), err == nil && id > 0
+}
+
+// Unlink a tea from one tasting by deleting only the ratings for that pair.
+func handleUnlinkTeaFromTasting(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	tastingID, validTasting := parsePositiveID(vars["tastingId"])
+	teaID, validTea := parsePositiveID(vars["teaId"])
+	if !validTasting || !validTea {
+		http.Error(w, "Invalid tasting or tea ID", http.StatusBadRequest)
+		return
+	}
+
+	result := db.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TeaRating{})
+	if result.Error != nil {
+		http.Error(w, "Failed to unlink tea from tasting", http.StatusInternalServerError)
+		return
+	}
+	if result.RowsAffected == 0 {
+		http.Error(w, "Tea is not linked to this tasting", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":         "Tea unlinked from tasting",
+		"ratings_deleted": result.RowsAffected,
+	})
+}
+
+// Delete a tea and all of its ratings, across every tasting.
+func handleDeleteTea(w http.ResponseWriter, r *http.Request) {
+	teaID, valid := parsePositiveID(mux.Vars(r)["id"])
+	if !valid {
+		http.Error(w, "Invalid tea ID", http.StatusBadRequest)
+		return
+	}
+
+	var ratingsDeleted int64
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var tea Tea
+		if err := tx.First(&tea, teaID).Error; err != nil {
+			return err
+		}
+
+		result := tx.Where("tea_id = ?", teaID).Delete(&TeaRating{})
+		if result.Error != nil {
+			return result.Error
+		}
+		ratingsDeleted = result.RowsAffected
+
+		result = tx.Delete(&tea)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		http.Error(w, "Tea not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, "Failed to delete tea", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":         "Tea and its ratings deleted",
+		"ratings_deleted": ratingsDeleted,
+	})
 }
 
 // Handle editing existing ratings
