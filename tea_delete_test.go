@@ -34,6 +34,8 @@ func TestUnlinkAndDeleteTea(t *testing.T) {
 		tx.Rollback()
 	}()
 
+	if err := tx.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}, &TastingTea{}); err != nil { t.Fatal(err) }
+
 	source := fmt.Sprintf("deletion-test-%d", time.Now().UnixNano())
 	tea := Tea{TeaName: "First", Provider: "Test", Source: source}
 	otherTea := Tea{TeaName: "Second", Provider: "Test", Source: source}
@@ -94,6 +96,8 @@ func TestUnlinkAndDeleteTea(t *testing.T) {
 	countRatings(tea.ID, firstTasting.ID, 0)
 	countRatings(tea.ID, secondTasting.ID, 1)
 	countRatings(otherTea.ID, firstTasting.ID, 1)
+	if err := tx.Create(&TastingTea{TastingID: firstTasting.ID, TeaID: tea.ID}).Error; err != nil { t.Fatal(err) }
+	request(unlinkPath, http.StatusOK, 0) // Unrated membership is removable.
 	request(unlinkPath, http.StatusNotFound, 0)
 	request(fmt.Sprintf("/tastings/0/teas/%d", tea.ID), http.StatusBadRequest, 0)
 	request(fmt.Sprintf("/tastings/%d/teas/not-a-number", firstTasting.ID), http.StatusBadRequest, 0)
