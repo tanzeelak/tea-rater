@@ -88,11 +88,11 @@ sqlDB.SetMaxOpenConns(5)
 
 // Run migrations
 if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}, &TastingTea{}); err != nil {
-log.Printf("Migration warning: %v", err)
+log.Fatalf("Migration failed: %v", err)
 }
 
 if err := db.Exec("INSERT INTO tasting_teas (tasting_id, tea_id) SELECT DISTINCT r.tasting_id, r.tea_id FROM tea_ratings r JOIN tea_tastings t ON t.id = r.tasting_id JOIN teas tea ON tea.id = r.tea_id WHERE r.tasting_id > 0 ON CONFLICT DO NOTHING").Error; err != nil {
-log.Printf("Tasting membership backfill failed: %v", err)
+log.Fatalf("Tasting membership backfill failed: %v", err)
 }
 
 r := mux.NewRouter()
