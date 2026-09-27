@@ -124,6 +124,7 @@ r.HandleFunc("/tastings/{tastingId}/teas/{teaId}", handleUnlinkTeaFromTasting).M
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
 		AllowedHeaders:   []string{"Content-Type"},
 		AllowCredentials: true,
+ExposedHeaders: []string{"X-Tasting-Membership"},
 	})
 
 	handler := c.Handler(r)
@@ -343,6 +344,7 @@ json.NewEncoder(w).Encode(tasting)
 // Return persistent tea membership even when a tasting has no ratings.
 func handleTastings(w http.ResponseWriter, r *http.Request) {
 w.Header().Set("Content-Type", "application/json")
+w.Header().Set("X-Tasting-Membership", "true")
 var tastings []TeaTasting
 if err := db.Find(&tastings).Error; err != nil { http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError); return }
 var links []TastingTea
