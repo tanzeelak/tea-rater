@@ -32,6 +32,7 @@ type User struct {
 type TeaTasting struct {
 	ID   uint   `json:"id" gorm:"primaryKey"`
 	Name string `json:"name"`
+	TeaIDs []uint `json:"tea_ids" gorm:"-"`
 }
 
 type TeaRating struct {
@@ -86,11 +87,15 @@ func main() {
 	sqlDB.SetMaxOpenConns(5)
 
 	// Run migrations
-	if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}); err != nil {
+	if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}, &TastingTea{}); err != nil {
 		log.Printf("Migration warning: %v", err)
 	}
 
-	r := mux.NewRouter()
+	if err := db.Exec("INSERT INTO tasting_teas (tasting_id, tea_id) SELECT DISTINCT r.tasting_id, r.tea_id FROM tea_ratings r JOIN tea_tastings t ON t.id = r.tasting_id JOIN teas tea ON tea.id = r.tea_id WHERE r.tasting_id > 0 ON CONFLICT DO NOTHING").Error; err != nil {
+log.Printf("Tasting membership backfill failed: %v", err)
+}
+
+r := mux.NewRouter()
 	r.HandleFunc("/", handleRoot).Methods("GET")
 	r.HandleFunc("/submit", handleSubmit).Methods("POST")
 	r.HandleFunc("/teas", handleTeas).Methods("GET")
@@ -99,7 +104,8 @@ func main() {
 	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
 	r.HandleFunc("/create-tasting", handleCreateTasting).Methods("POST")
 	r.HandleFunc("/tastings", handleTastings).Methods("GET")
-	r.HandleFunc("/tastings/{tastingId}/teas/{teaId}", handleUnlinkTeaFromTasting).Methods("DELETE")
+	r.HandleFunc("/tastings/{tastingId}/teas", handleAddTeaToTasting).Methods("POST")
+r.HandleFunc("/tastings/{tastingId}/teas/{teaId}", handleUnlinkTeaFromTasting).Methods("DELETE")
 	r.HandleFunc("/teas/{id}", handleDeleteTea).Methods("DELETE")
 	r.HandleFunc("/ratings", handleRatings).Methods("GET")
 	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
@@ -200,8 +206,22 @@ func handleSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	db.Create(&rating)
-	w.WriteHeader(http.StatusCreated)
+	if rating.TastingID > 0 {
+var tasting TeaTasting
+if err := db.First(&tasting, rating.TastingID).Error; err != nil {
+http.Error(w, "Tasting ID does not exist", http.StatusNotFound)
+return
+}
+}
+if err := db.Transaction(func(tx *gorm.DB) error {
+if err := tx.Create(&rating).Error; err != nil { return err }
+if rating.TastingID > 0 { return linkTastingTea(tx, rating.TastingID, rating.TeaID) }
+return nil
+}); err != nil {
+http.Error(w, "Failed to save rating", http.StatusInternalServerError)
+return
+}
+w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(rating)
 }
 
@@ -289,47 +309,49 @@ func handleAllTeas(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-// Handle creating a new tasting session
+// Create a tasting and its initial tea membership atomically.
 func handleCreateTasting(w http.ResponseWriter, r *http.Request) {
-	var tasting TeaTasting
-	if err := json.NewDecoder(r.Body).Decode(&tasting); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	tasting.Name = strings.TrimSpace(tasting.Name)
-	if tasting.Name == "" {
-		http.Error(w, "Tasting name is required", http.StatusBadRequest)
-		return
-	}
-
-	// Check if tasting with same name already exists
-	var existingTasting TeaTasting
-	if err := db.Where("name = ?", tasting.Name).First(&existingTasting).Error; err == nil {
-		http.Error(w, "Tasting with this name already exists", http.StatusConflict)
-		return
-	}
-
-	if err := db.Create(&tasting).Error; err != nil {
-		http.Error(w, "Failed to create tasting", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(tasting)
+var tasting TeaTasting
+if err := json.NewDecoder(r.Body).Decode(&tasting); err != nil { http.Error(w, "Invalid request", http.StatusBadRequest); return }
+tasting.Name = strings.TrimSpace(tasting.Name)
+if tasting.Name == "" { http.Error(w, "Tasting name is required", http.StatusBadRequest); return }
+var existing TeaTasting
+if err := db.Where("name = ?", tasting.Name).First(&existing).Error; err == nil { http.Error(w, "Tasting with this name already exists", http.StatusConflict); return }
+unique := make(map[uint]bool)
+for _, id := range tasting.TeaIDs {
+if id == 0 { http.Error(w, "Invalid tea ID", http.StatusBadRequest); return }
+if unique[id] { continue }
+unique[id] = true
+var tea Tea
+if err := db.First(&tea, id).Error; err != nil {
+if errors.Is(err, gorm.ErrRecordNotFound) { http.Error(w, "Tea not found", http.StatusNotFound) } else { http.Error(w, "Could not check tea", http.StatusInternalServerError) }
+return
+}
+}
+tasting.TeaIDs = make([]uint, 0, len(unique))
+for id := range unique { tasting.TeaIDs = append(tasting.TeaIDs, id) }
+if err := db.Transaction(func(tx *gorm.DB) error {
+if err := tx.Create(&tasting).Error; err != nil { return err }
+for _, id := range tasting.TeaIDs { if err := linkTastingTea(tx, tasting.ID, id); err != nil { return err } }
+return nil
+}); err != nil { http.Error(w, "Failed to create tasting", http.StatusInternalServerError); return }
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusCreated)
+json.NewEncoder(w).Encode(tasting)
 }
 
-// Handle getting all tastings
+// Return persistent tea membership even when a tasting has no ratings.
 func handleTastings(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var tastings []TeaTasting
-	if err := db.Find(&tastings).Error; err != nil {
-		http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(w).Encode(tastings)
+w.Header().Set("Content-Type", "application/json")
+var tastings []TeaTasting
+if err := db.Find(&tastings).Error; err != nil { http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError); return }
+var links []TastingTea
+if err := db.Find(&links).Error; err != nil { http.Error(w, "Failed to fetch tasting teas", http.StatusInternalServerError); return }
+byID := make(map[uint]int, len(tastings))
+for i := range tastings { tastings[i].TeaIDs = []uint{}; byID[tastings[i].ID] = i }
+for _, link := range links { if i, ok := byID[link.TastingID]; ok { tastings[i].TeaIDs = append(tastings[i].TeaIDs, link.TeaID) } }
+if tastings == nil { tastings = []TeaTasting{} }
+json.NewEncoder(w).Encode(tastings)
 }
 
 func parsePositiveID(value string) (uint, bool) {
@@ -337,31 +359,27 @@ func parsePositiveID(value string) (uint, bool) {
 	return uint(id), err == nil && id > 0
 }
 
-// Unlink a tea from one tasting by deleting only the ratings for that pair.
+// Remove a tea's membership and all ratings for that tea in this tasting.
 func handleUnlinkTeaFromTasting(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	tastingID, validTasting := parsePositiveID(vars["tastingId"])
-	teaID, validTea := parsePositiveID(vars["teaId"])
-	if !validTasting || !validTea {
-		http.Error(w, "Invalid tasting or tea ID", http.StatusBadRequest)
-		return
-	}
-
-	result := db.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TeaRating{})
-	if result.Error != nil {
-		http.Error(w, "Failed to unlink tea from tasting", http.StatusInternalServerError)
-		return
-	}
-	if result.RowsAffected == 0 {
-		http.Error(w, "Tea is not linked to this tasting", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":         "Tea unlinked from tasting",
-		"ratings_deleted": result.RowsAffected,
-	})
+vars := mux.Vars(r)
+tastingID, validTasting := parsePositiveID(vars["tastingId"])
+teaID, validTea := parsePositiveID(vars["teaId"])
+if !validTasting || !validTea { http.Error(w, "Invalid tasting or tea ID", http.StatusBadRequest); return }
+var membershipDeleted, ratingsDeleted int64
+err := db.Transaction(func(tx *gorm.DB) error {
+link := tx.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TastingTea{})
+if link.Error != nil { return link.Error }
+membershipDeleted = link.RowsAffected
+ratings := tx.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TeaRating{})
+if ratings.Error != nil { return ratings.Error }
+ratingsDeleted = ratings.RowsAffected
+if membershipDeleted == 0 && ratingsDeleted == 0 { return gorm.ErrRecordNotFound }
+return nil
+})
+if errors.Is(err, gorm.ErrRecordNotFound) { http.Error(w, "Tea is not linked to this tasting", http.StatusNotFound); return }
+if err != nil { http.Error(w, "Failed to unlink tea from tasting", http.StatusInternalServerError); return }
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{"message":"Tea unlinked from tasting", "ratings_deleted":ratingsDeleted})
 }
 
 // Delete a tea and all of its ratings, across every tasting.
@@ -385,7 +403,8 @@ func handleDeleteTea(w http.ResponseWriter, r *http.Request) {
 		}
 		ratingsDeleted = result.RowsAffected
 
-		result = tx.Delete(&tea)
+if err := tx.Where("tea_id = ?", teaID).Delete(&TastingTea{}).Error; err != nil { return err }
+result = tx.Delete(&tea)
 		if result.Error != nil {
 			return result.Error
 		}
