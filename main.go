@@ -1,682 +1,768 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
+"encoding/json"
+"errors"
+"fmt"
+"log"
+"net/http"
+"os"
+"strconv"
+"strings"
 
-	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
-	"github.com/rs/cors"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+"github.com/gorilla/mux"
+"github.com/joho/godotenv"
+"github.com/rs/cors"
+"gorm.io/driver/postgres"
+"gorm.io/gorm"
 )
 
 type Tea struct {
-	ID       uint   `json:"id" gorm:"primaryKey"`
-	TeaName  string `json:"tea_name" gorm:"uniqueIndex:idx_teas_source_tea_name,priority:2"`
-	Provider string `json:"provider"`
-	Source   string `json:"source" gorm:"uniqueIndex:idx_teas_source_tea_name,priority:1"`
+ID       uint   `json:"id" gorm:"primaryKey"`
+TeaName  string `json:"tea_name" gorm:"uniqueIndex:idx_teas_source_tea_name,priority:2"`
+Provider string `json:"provider"`
+Source   string `json:"source" gorm:"uniqueIndex:idx_teas_source_tea_name,priority:1"`
 }
 
 type User struct {
-	ID   uint   `json:"id" gorm:"primaryKey"`
-	Name string `json:"name"`
+ID   uint   `json:"id" gorm:"primaryKey"`
+Name string `json:"name"`
 }
 
 type TeaTasting struct {
-	ID   uint   `json:"id" gorm:"primaryKey"`
-	Name string `json:"name"`
+ID     uint   `json:"id" gorm:"primaryKey"`
+Name   string `json:"name"`
+TeaIDs []uint `json:"tea_ids" gorm:"-"`
 }
 
 type TeaRating struct {
-	ID          uint    `json:"id" gorm:"primaryKey"`
-	UserID      uint    `json:"user_id" gorm:"foreignKey"`
-	TeaID       uint    `json:"tea_id" gorm:"foreignKey"`
-	TastingID   uint    `json:"tasting_id" gorm:"foreignKey"`
-	Umami       float64 `json:"umami"`
-	Astringency float64 `json:"astringency"`
-	Floral      float64 `json:"floral"`
-	Vegetal     float64 `json:"vegetal"`
-	Nutty       float64 `json:"nutty"`
-	Roasted     float64 `json:"roasted"`
-	Body        float64 `json:"body"`
-	Rating      float64 `json:"rating"`
+ID          uint    `json:"id" gorm:"primaryKey"`
+UserID      uint    `json:"user_id" gorm:"foreignKey"`
+TeaID       uint    `json:"tea_id" gorm:"foreignKey"`
+TastingID   uint    `json:"tasting_id" gorm:"foreignKey"`
+Umami       float64 `json:"umami"`
+Astringency float64 `json:"astringency"`
+Floral      float64 `json:"floral"`
+Vegetal     float64 `json:"vegetal"`
+Nutty       float64 `json:"nutty"`
+Roasted     float64 `json:"roasted"`
+Body        float64 `json:"body"`
+Rating      float64 `json:"rating"`
 }
 
 var db *gorm.DB
 
 func init() {
-	// Load .env file if it exists
-	if err := godotenv.Load(); err != nil {
-		log.Printf("No .env file found or error loading it: %v", err)
-	}
+// Load .env file if it exists
+if err := godotenv.Load(); err != nil {
+log.Printf("No .env file found or error loading it: %v", err)
+}
 }
 
 func main() {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		log.Fatal("DATABASE_URL environment variable is required")
-	}
+dsn := os.Getenv("DATABASE_URL")
+if dsn == "" {
+log.Fatal("DATABASE_URL environment variable is required")
+}
 
-	var err error
-	// Configure database connection
-	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		PrepareStmt:                              false,
-		DisableForeignKeyConstraintWhenMigrating: true,
-		TranslateError:                           true,
-	})
-	if err != nil {
-		log.Fatal("Failed to connect database:", err)
-	}
+var err error
+// Configure database connection
+db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
+PrepareStmt:                              false,
+DisableForeignKeyConstraintWhenMigrating: true,
+TranslateError:                           true,
+})
+if err != nil {
+log.Fatal("Failed to connect database:", err)
+}
 
-	// Get underlying SQL DB to configure pool settings
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatal("Failed to get database instance:", err)
-	}
+// Get underlying SQL DB to configure pool settings
+sqlDB, err := db.DB()
+if err != nil {
+log.Fatal("Failed to get database instance:", err)
+}
 
-	// Set connection pool settings
-	sqlDB.SetMaxIdleConns(2)
-	sqlDB.SetMaxOpenConns(5)
+// Set connection pool settings
+sqlDB.SetMaxIdleConns(2)
+sqlDB.SetMaxOpenConns(5)
 
-	// Run migrations
-	if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}); err != nil {
-		log.Printf("Migration warning: %v", err)
-	}
+// Run migrations
+if err := db.AutoMigrate(&Tea{}, &TeaTasting{}, &TeaRating{}, &User{}, &TastingTea{}); err != nil {
+log.Printf("Migration warning: %v", err)
+}
 
-	r := mux.NewRouter()
-	r.HandleFunc("/", handleRoot).Methods("GET")
-	r.HandleFunc("/submit", handleSubmit).Methods("POST")
-	r.HandleFunc("/teas", handleTeas).Methods("GET")
-	r.HandleFunc("/all-teas", handleAllTeas).Methods("GET")
-	r.HandleFunc("/register-tea", handleRegisterTea).Methods("POST")
-	r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
-	r.HandleFunc("/create-tasting", handleCreateTasting).Methods("POST")
-	r.HandleFunc("/tastings", handleTastings).Methods("GET")
-	r.HandleFunc("/tastings/{tastingId}/teas/{teaId}", handleUnlinkTeaFromTasting).Methods("DELETE")
-	r.HandleFunc("/teas/{id}", handleDeleteTea).Methods("DELETE")
-	r.HandleFunc("/ratings", handleRatings).Methods("GET")
-	r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
-	r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")
-	r.HandleFunc("/summary", handleSummary).Methods("GET")
-	r.HandleFunc("/dashboard", handleDashboard).Methods("GET")
-	r.HandleFunc("/login", handleLogin).Methods("POST")
-	r.HandleFunc("/logout", handleLogout).Methods("POST")
-	r.HandleFunc("/user-ratings/{userId}", handleUserRatings).Methods("GET")
-	r.HandleFunc("/user/{userId}", handleGetUser).Methods("GET")
-	r.HandleFunc("/drop-teas", handleDropTeas).Methods("POST")
-	r.HandleFunc("/seed-teas", handleSeedTeas).Methods("POST")
+if err := db.Exec("INSERT INTO tasting_teas (tasting_id, tea_id) SELECT DISTINCT r.tasting_id, r.tea_id FROM tea_ratings r JOIN tea_tastings t ON t.id = r.tasting_id JOIN teas tea ON tea.id = r.tea_id WHERE r.tasting_id > 0 ON CONFLICT DO NOTHING").Error; err != nil {
+log.Printf("Tasting membership backfill failed: %v", err)
+}
 
-	c := cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
-		AllowedHeaders:   []string{"Content-Type"},
-		AllowCredentials: true,
-	})
+r := mux.NewRouter()
+r.HandleFunc("/", handleRoot).Methods("GET")
+r.HandleFunc("/submit", handleSubmit).Methods("POST")
+r.HandleFunc("/teas", handleTeas).Methods("GET")
+r.HandleFunc("/all-teas", handleAllTeas).Methods("GET")
+r.HandleFunc("/register-tea", handleRegisterTea).Methods("POST")
+r.HandleFunc("/register-user", handleRegisterUser).Methods("POST")
+r.HandleFunc("/create-tasting", handleCreateTasting).Methods("POST")
+r.HandleFunc("/tastings", handleTastings).Methods("GET")
+r.HandleFunc("/tastings/{tastingId}/teas", handleAddTeaToTasting).Methods("POST")
+r.HandleFunc("/tastings/{tastingId}/teas/{teaId}", handleUnlinkTeaFromTasting).Methods("DELETE")
+r.HandleFunc("/teas/{id}", handleDeleteTea).Methods("DELETE")
+r.HandleFunc("/ratings", handleRatings).Methods("GET")
+r.HandleFunc("/ratings/{id}", handleEdit).Methods("PUT")
+r.HandleFunc("/ratings/{id}", handleDelete).Methods("DELETE")
+r.HandleFunc("/summary", handleSummary).Methods("GET")
+r.HandleFunc("/dashboard", handleDashboard).Methods("GET")
+r.HandleFunc("/login", handleLogin).Methods("POST")
+r.HandleFunc("/logout", handleLogout).Methods("POST")
+r.HandleFunc("/user-ratings/{userId}", handleUserRatings).Methods("GET")
+r.HandleFunc("/user/{userId}", handleGetUser).Methods("GET")
+r.HandleFunc("/drop-teas", handleDropTeas).Methods("POST")
+r.HandleFunc("/seed-teas", handleSeedTeas).Methods("POST")
 
-	handler := c.Handler(r)
+c := cors.New(cors.Options{
+AllowedOrigins:   []string{"*"},
+AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE"},
+AllowedHeaders:   []string{"Content-Type"},
+AllowCredentials: true,
+ExposedHeaders:   []string{"X-Tasting-Membership"},
+})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+handler := c.Handler(r)
 
-	fmt.Println("Server running on port:", port)
-	log.Fatal(http.ListenAndServe(":"+port, handler))
+port := os.Getenv("PORT")
+if port == "" {
+port = "8080"
+}
+
+fmt.Println("Server running on port:", port)
+log.Fatal(http.ListenAndServe(":"+port, handler))
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "I'm here"})
+w.WriteHeader(http.StatusOK)
+json.NewEncoder(w).Encode(map[string]string{"message": "I'm here"})
 }
 
 // Handle new user registration
 func handleRegisterUser(w http.ResponseWriter, r *http.Request) {
-	var user User
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	user.Name = strings.ToLower(strings.TrimSpace(user.Name))
+var user User
+if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+http.Error(w, err.Error(), http.StatusBadRequest)
+return
+}
+user.Name = strings.ToLower(strings.TrimSpace(user.Name))
 
-	// Check if username already exists
-	var existingUser User
-	if err := db.Where("name = ?", user.Name).First(&existingUser).Error; err == nil {
-		http.Error(w, "Username already exists", http.StatusConflict)
-		return
-	}
+// Check if username already exists
+var existingUser User
+if err := db.Where("name = ?", user.Name).First(&existingUser).Error; err == nil {
+http.Error(w, "Username already exists", http.StatusConflict)
+return
+}
 
-	if err := db.Create(&user).Error; err != nil {
-		http.Error(w, "Failed to create user", http.StatusInternalServerError)
-		return
-	}
+if err := db.Create(&user).Error; err != nil {
+http.Error(w, "Failed to create user", http.StatusInternalServerError)
+return
+}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful", "token": fmt.Sprintf("user-%d", user.ID)})
+w.WriteHeader(http.StatusCreated)
+json.NewEncoder(w).Encode(map[string]string{"message": "Registration successful", "token": fmt.Sprintf("user-%d", user.ID)})
 }
 
 // Handle user login
 func handleLogin(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Name string `json:"name"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid request", http.StatusBadRequest)
-		return
-	}
+var request struct {
+Name string `json:"name"`
+}
+if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+http.Error(w, "Invalid request", http.StatusBadRequest)
+return
+}
 
-	name := strings.ToLower(strings.TrimSpace(request.Name))
-	var user User
-	if err := db.Where("name = ?", name).First(&user).Error; err != nil {
-		http.Error(w, "User not found", http.StatusUnauthorized)
-		return
-	}
+name := strings.ToLower(strings.TrimSpace(request.Name))
+var user User
+if err := db.Where("name = ?", name).First(&user).Error; err != nil {
+http.Error(w, "User not found", http.StatusUnauthorized)
+return
+}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Login successful", "token": fmt.Sprintf("user-%d", user.ID)})
+w.WriteHeader(http.StatusOK)
+json.NewEncoder(w).Encode(map[string]string{"message": "Login successful", "token": fmt.Sprintf("user-%d", user.ID)})
 }
 
 // Handle new rating submissions
 func handleSubmit(w http.ResponseWriter, r *http.Request) {
-	var rating TeaRating
-	if err := json.NewDecoder(r.Body).Decode(&rating); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	var existingTea Tea
-	if err := db.Where("id = ?", rating.TeaID).First(&existingTea).Error; err != nil {
-		http.Error(w, "Tea ID does not exist", http.StatusNotFound)
-		return
-	}
-	var existingUser User
-	if err := db.Where("id = ?", rating.UserID).First(&existingUser).Error; err != nil {
-		http.Error(w, "User ID does not exist", http.StatusNotFound)
-		return
-	}
+var rating TeaRating
+if err := json.NewDecoder(r.Body).Decode(&rating); err != nil {
+http.Error(w, err.Error(), http.StatusBadRequest)
+return
+}
+var existingTea Tea
+if err := db.Where("id = ?", rating.TeaID).First(&existingTea).Error; err != nil {
+http.Error(w, "Tea ID does not exist", http.StatusNotFound)
+return
+}
+var existingUser User
+if err := db.Where("id = ?", rating.UserID).First(&existingUser).Error; err != nil {
+http.Error(w, "User ID does not exist", http.StatusNotFound)
+return
+}
 
-	db.Create(&rating)
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(rating)
+if rating.TastingID > 0 {
+var tasting TeaTasting
+if err := db.First(&tasting, rating.TastingID).Error; err != nil {
+http.Error(w, "Tasting ID does not exist", http.StatusNotFound)
+return
+}
+}
+if err := db.Transaction(func(tx *gorm.DB) error {
+if err := tx.Create(&rating).Error; err != nil {
+return err
+}
+if rating.TastingID > 0 {
+return linkTastingTea(tx, rating.TastingID, rating.TeaID)
+}
+return nil
+}); err != nil {
+http.Error(w, "Failed to save rating", http.StatusInternalServerError)
+return
+}
+w.WriteHeader(http.StatusCreated)
+json.NewEncoder(w).Encode(rating)
 }
 
 // Handle retrieve all ratings
 func handleRatings(w http.ResponseWriter, r *http.Request) {
-	var ratings []TeaRating
-	db.Find(&ratings)
-	json.NewEncoder(w).Encode(ratings)
+var ratings []TeaRating
+db.Find(&ratings)
+json.NewEncoder(w).Encode(ratings)
 }
 
 // Handle retrieve teas
 func handleTeas(w http.ResponseWriter, r *http.Request) {
-	// Get user ID from query parameter
-	userID := r.URL.Query().Get("user_id")
-	if userID == "" {
-		http.Error(w, "user_id is required", http.StatusBadRequest)
-		return
-	}
+// Get user ID from query parameter
+userID := r.URL.Query().Get("user_id")
+if userID == "" {
+http.Error(w, "user_id is required", http.StatusBadRequest)
+return
+}
 
-	// Get all teas that haven't been rated by this user
-	var teas []Tea
-	db.Raw(`
-		SELECT t.* 
-		FROM teas t 
-		WHERE t.id NOT IN (
-			SELECT tea_id 
-			FROM tea_ratings 
-			WHERE user_id = ?
-		)
-	`, userID).Scan(&teas)
+// Get all teas that haven't been rated by this user
+var teas []Tea
+db.Raw(`
+SELECT t.* 
+FROM teas t 
+WHERE t.id NOT IN (
+SELECT tea_id 
+FROM tea_ratings 
+WHERE user_id = ?
+)
+`, userID).Scan(&teas)
 
-	// Create response with display format
-	type TeaResponse struct {
-		ID       uint   `json:"id"`
-		TeaName  string `json:"tea_name"`
-		Provider string `json:"provider"`
-		Source   string `json:"source"`
-		Display  string `json:"display"`
-	}
+// Create response with display format
+type TeaResponse struct {
+ID       uint   `json:"id"`
+TeaName  string `json:"tea_name"`
+Provider string `json:"provider"`
+Source   string `json:"source"`
+Display  string `json:"display"`
+}
 
-	var response []TeaResponse
-	for _, tea := range teas {
-		displayStr := tea.TeaName
-		if tea.Source != "" {
-			displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
-		}
-		response = append(response, TeaResponse{
-			ID:       tea.ID,
-			TeaName:  tea.TeaName,
-			Provider: tea.Provider,
-			Source:   tea.Source,
-			Display:  displayStr,
-		})
-	}
-	json.NewEncoder(w).Encode(response)
+var response []TeaResponse
+for _, tea := range teas {
+displayStr := tea.TeaName
+if tea.Source != "" {
+displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
+}
+response = append(response, TeaResponse{
+ID:       tea.ID,
+TeaName:  tea.TeaName,
+Provider: tea.Provider,
+Source:   tea.Source,
+Display:  displayStr,
+})
+}
+json.NewEncoder(w).Encode(response)
 }
 
 func handleAllTeas(w http.ResponseWriter, r *http.Request) {
-	var teas []Tea
-	db.Find(&teas)
+var teas []Tea
+db.Find(&teas)
 
-	// Create response with display format
-	type TeaResponse struct {
-		ID       uint   `json:"id"`
-		TeaName  string `json:"tea_name"`
-		Provider string `json:"provider"`
-		Source   string `json:"source"`
-		Display  string `json:"display"`
-	}
-
-	var response []TeaResponse
-	for _, tea := range teas {
-		displayStr := tea.TeaName
-		if tea.Source != "" {
-			displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
-		}
-		response = append(response, TeaResponse{
-			ID:       tea.ID,
-			TeaName:  tea.TeaName,
-			Provider: tea.Provider,
-			Source:   tea.Source,
-			Display:  displayStr,
-		})
-	}
-	json.NewEncoder(w).Encode(response)
+// Create response with display format
+type TeaResponse struct {
+ID       uint   `json:"id"`
+TeaName  string `json:"tea_name"`
+Provider string `json:"provider"`
+Source   string `json:"source"`
+Display  string `json:"display"`
 }
 
-// Handle creating a new tasting session
+var response []TeaResponse
+for _, tea := range teas {
+displayStr := tea.TeaName
+if tea.Source != "" {
+displayStr = fmt.Sprintf("%s (%s)", tea.TeaName, tea.Source)
+}
+response = append(response, TeaResponse{
+ID:       tea.ID,
+TeaName:  tea.TeaName,
+Provider: tea.Provider,
+Source:   tea.Source,
+Display:  displayStr,
+})
+}
+json.NewEncoder(w).Encode(response)
+}
+
+// Create a tasting and its initial tea membership atomically.
 func handleCreateTasting(w http.ResponseWriter, r *http.Request) {
-	var tasting TeaTasting
-	if err := json.NewDecoder(r.Body).Decode(&tasting); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	tasting.Name = strings.TrimSpace(tasting.Name)
-	if tasting.Name == "" {
-		http.Error(w, "Tasting name is required", http.StatusBadRequest)
-		return
-	}
-
-	// Check if tasting with same name already exists
-	var existingTasting TeaTasting
-	if err := db.Where("name = ?", tasting.Name).First(&existingTasting).Error; err == nil {
-		http.Error(w, "Tasting with this name already exists", http.StatusConflict)
-		return
-	}
-
-	if err := db.Create(&tasting).Error; err != nil {
-		http.Error(w, "Failed to create tasting", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(tasting)
+var tasting TeaTasting
+if err := json.NewDecoder(r.Body).Decode(&tasting); err != nil {
+http.Error(w, "Invalid request", http.StatusBadRequest)
+return
+}
+tasting.Name = strings.TrimSpace(tasting.Name)
+if tasting.Name == "" {
+http.Error(w, "Tasting name is required", http.StatusBadRequest)
+return
+}
+var existing TeaTasting
+if err := db.Where("name = ?", tasting.Name).First(&existing).Error; err == nil {
+http.Error(w, "Tasting with this name already exists", http.StatusConflict)
+return
+}
+unique := make(map[uint]bool)
+for _, id := range tasting.TeaIDs {
+if id == 0 {
+http.Error(w, "Invalid tea ID", http.StatusBadRequest)
+return
+}
+if unique[id] {
+continue
+}
+unique[id] = true
+var tea Tea
+if err := db.First(&tea, id).Error; err != nil {
+if errors.Is(err, gorm.ErrRecordNotFound) {
+http.Error(w, "Tea not found", http.StatusNotFound)
+} else {
+http.Error(w, "Could not check tea", http.StatusInternalServerError)
+}
+return
+}
+}
+tasting.TeaIDs = make([]uint, 0, len(unique))
+for id := range unique {
+tasting.TeaIDs = append(tasting.TeaIDs, id)
+}
+if err := db.Transaction(func(tx *gorm.DB) error {
+if err := tx.Create(&tasting).Error; err != nil {
+return err
+}
+for _, id := range tasting.TeaIDs {
+if err := linkTastingTea(tx, tasting.ID, id); err != nil {
+return err
+}
+}
+return nil
+}); err != nil {
+http.Error(w, "Failed to create tasting", http.StatusInternalServerError)
+return
+}
+w.Header().Set("Content-Type", "application/json")
+w.WriteHeader(http.StatusCreated)
+json.NewEncoder(w).Encode(tasting)
 }
 
-// Handle getting all tastings
+// Return persistent tea membership even when a tasting has no ratings.
 func handleTastings(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	var tastings []TeaTasting
-	if err := db.Find(&tastings).Error; err != nil {
-		http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(w).Encode(tastings)
+w.Header().Set("Content-Type", "application/json")
+w.Header().Set("X-Tasting-Membership", "true")
+var tastings []TeaTasting
+if err := db.Find(&tastings).Error; err != nil {
+http.Error(w, "Failed to fetch tastings", http.StatusInternalServerError)
+return
+}
+var links []TastingTea
+if err := db.Find(&links).Error; err != nil {
+http.Error(w, "Failed to fetch tasting teas", http.StatusInternalServerError)
+return
+}
+byID := make(map[uint]int, len(tastings))
+for i := range tastings {
+tastings[i].TeaIDs = []uint{}
+byID[tastings[i].ID] = i
+}
+for _, link := range links {
+if i, ok := byID[link.TastingID]; ok {
+tastings[i].TeaIDs = append(tastings[i].TeaIDs, link.TeaID)
+}
+}
+if tastings == nil {
+tastings = []TeaTasting{}
+}
+json.NewEncoder(w).Encode(tastings)
 }
 
 func parsePositiveID(value string) (uint, bool) {
-	id, err := strconv.ParseUint(value, 10, strconv.IntSize)
-	return uint(id), err == nil && id > 0
+id, err := strconv.ParseUint(value, 10, strconv.IntSize)
+return uint(id), err == nil && id > 0
 }
 
-// Unlink a tea from one tasting by deleting only the ratings for that pair.
+// Remove a tea's membership and all ratings for that tea in this tasting.
 func handleUnlinkTeaFromTasting(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	tastingID, validTasting := parsePositiveID(vars["tastingId"])
-	teaID, validTea := parsePositiveID(vars["teaId"])
-	if !validTasting || !validTea {
-		http.Error(w, "Invalid tasting or tea ID", http.StatusBadRequest)
-		return
-	}
-
-	result := db.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TeaRating{})
-	if result.Error != nil {
-		http.Error(w, "Failed to unlink tea from tasting", http.StatusInternalServerError)
-		return
-	}
-	if result.RowsAffected == 0 {
-		http.Error(w, "Tea is not linked to this tasting", http.StatusNotFound)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":         "Tea unlinked from tasting",
-		"ratings_deleted": result.RowsAffected,
-	})
+vars := mux.Vars(r)
+tastingID, validTasting := parsePositiveID(vars["tastingId"])
+teaID, validTea := parsePositiveID(vars["teaId"])
+if !validTasting || !validTea {
+http.Error(w, "Invalid tasting or tea ID", http.StatusBadRequest)
+return
+}
+var membershipDeleted, ratingsDeleted int64
+err := db.Transaction(func(tx *gorm.DB) error {
+link := tx.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TastingTea{})
+if link.Error != nil {
+return link.Error
+}
+membershipDeleted = link.RowsAffected
+ratings := tx.Where("tasting_id = ? AND tea_id = ?", tastingID, teaID).Delete(&TeaRating{})
+if ratings.Error != nil {
+return ratings.Error
+}
+ratingsDeleted = ratings.RowsAffected
+if membershipDeleted == 0 && ratingsDeleted == 0 {
+return gorm.ErrRecordNotFound
+}
+return nil
+})
+if errors.Is(err, gorm.ErrRecordNotFound) {
+http.Error(w, "Tea is not linked to this tasting", http.StatusNotFound)
+return
+}
+if err != nil {
+http.Error(w, "Failed to unlink tea from tasting", http.StatusInternalServerError)
+return
+}
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{"message": "Tea unlinked from tasting", "ratings_deleted": ratingsDeleted})
 }
 
 // Delete a tea and all of its ratings, across every tasting.
 func handleDeleteTea(w http.ResponseWriter, r *http.Request) {
-	teaID, valid := parsePositiveID(mux.Vars(r)["id"])
-	if !valid {
-		http.Error(w, "Invalid tea ID", http.StatusBadRequest)
-		return
-	}
+teaID, valid := parsePositiveID(mux.Vars(r)["id"])
+if !valid {
+http.Error(w, "Invalid tea ID", http.StatusBadRequest)
+return
+}
 
-	var ratingsDeleted int64
-	err := db.Transaction(func(tx *gorm.DB) error {
-		var tea Tea
-		if err := tx.First(&tea, teaID).Error; err != nil {
-			return err
-		}
+var ratingsDeleted int64
+err := db.Transaction(func(tx *gorm.DB) error {
+var tea Tea
+if err := tx.First(&tea, teaID).Error; err != nil {
+return err
+}
 
-		result := tx.Where("tea_id = ?", teaID).Delete(&TeaRating{})
-		if result.Error != nil {
-			return result.Error
-		}
-		ratingsDeleted = result.RowsAffected
+result := tx.Where("tea_id = ?", teaID).Delete(&TeaRating{})
+if result.Error != nil {
+return result.Error
+}
+ratingsDeleted = result.RowsAffected
 
-		result = tx.Delete(&tea)
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected == 0 {
-			return gorm.ErrRecordNotFound
-		}
-		return nil
-	})
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		http.Error(w, "Tea not found", http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		http.Error(w, "Failed to delete tea", http.StatusInternalServerError)
-		return
-	}
+if err := tx.Where("tea_id = ?", teaID).Delete(&TastingTea{}).Error; err != nil {
+return err
+}
+result = tx.Delete(&tea)
+if result.Error != nil {
+return result.Error
+}
+if result.RowsAffected == 0 {
+return gorm.ErrRecordNotFound
+}
+return nil
+})
+if errors.Is(err, gorm.ErrRecordNotFound) {
+http.Error(w, "Tea not found", http.StatusNotFound)
+return
+}
+if err != nil {
+http.Error(w, "Failed to delete tea", http.StatusInternalServerError)
+return
+}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":         "Tea and its ratings deleted",
-		"ratings_deleted": ratingsDeleted,
-	})
+w.Header().Set("Content-Type", "application/json")
+json.NewEncoder(w).Encode(map[string]interface{}{
+"message":         "Tea and its ratings deleted",
+"ratings_deleted": ratingsDeleted,
+})
 }
 
 // Handle editing existing ratings
 func handleEdit(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id := vars["id"]
+vars := mux.Vars(r)
+id := vars["id"]
 
-	var rating TeaRating
-	if err := db.First(&rating, id).Error; err != nil {
-		http.Error(w, "Rating not found", http.StatusNotFound)
-		return
-	}
+var rating TeaRating
+if err := db.First(&rating, id).Error; err != nil {
+http.Error(w, "Rating not found", http.StatusNotFound)
+return
+}
 
-	if err := json.NewDecoder(r.Body).Decode(&rating); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	db.Save(&rating)
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(rating)
+if err := json.NewDecoder(r.Body).Decode(&rating); err != nil {
+http.Error(w, err.Error(), http.StatusBadRequest)
+return
+}
+db.Save(&rating)
+w.WriteHeader(http.StatusOK)
+json.NewEncoder(w).Encode(rating)
 }
 
 // Handle deleting a rating
 func handleDelete(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	id := vars["id"]
+vars := mux.Vars(r)
+id := vars["id"]
 
-	if err := db.Delete(&TeaRating{}, id).Error; err != nil {
-		http.Error(w, "Failed to delete rating", http.StatusInternalServerError)
-		return
-	}
+if err := db.Delete(&TeaRating{}, id).Error; err != nil {
+http.Error(w, "Failed to delete rating", http.StatusInternalServerError)
+return
+}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Rating deleted"})
+w.WriteHeader(http.StatusOK)
+json.NewEncoder(w).Encode(map[string]string{"message": "Rating deleted"})
 }
 
 // Summarize ratings for each tea
 type Summary struct {
-	TeaName        string  `json:"tea_name"`
-	AvgRating      float64 `json:"avg_rating"`
-	AvgUmami       float64 `json:"avg_umami"`
-	AvgAstringency float64 `json:"avg_astringency"`
-	AvgFloral      float64 `json:"avg_floral"`
-	AvgVegetal     float64 `json:"avg_vegetal"`
-	AvgNutty       float64 `json:"avg_nutty"`
-	AvgRoasted     float64 `json:"avg_roasted"`
+TeaName        string  `json:"tea_name"`
+AvgRating      float64 `json:"avg_rating"`
+AvgUmami       float64 `json:"avg_umami"`
+AvgAstringency float64 `json:"avg_astringency"`
+AvgFloral      float64 `json:"avg_floral"`
+AvgVegetal     float64 `json:"avg_vegetal"`
+AvgNutty       float64 `json:"avg_nutty"`
+AvgRoasted     float64 `json:"avg_roasted"`
 }
 
 func handleSummary(w http.ResponseWriter, r *http.Request) {
-	var summaries []Summary
-	db.Raw(`SELECT 
-		t.tea_name, 
-		AVG(tr.rating) as avg_rating, 
-		AVG(tr.umami) as avg_umami, 
-		AVG(tr.astringency) as avg_astringency,
-		AVG(tr.floral) as avg_floral,
-		AVG(tr.vegetal) as avg_vegetal,
-		AVG(tr.nutty) as avg_nutty,
-		AVG(tr.roasted) as avg_roasted
-		FROM tea_ratings tr 
-		JOIN teas t ON tr.tea_id = t.id 
-		GROUP BY tr.tea_id`).
-		Scan(&summaries)
+var summaries []Summary
+db.Raw(`SELECT 
+t.tea_name, 
+AVG(tr.rating) as avg_rating, 
+AVG(tr.umami) as avg_umami, 
+AVG(tr.astringency) as avg_astringency,
+AVG(tr.floral) as avg_floral,
+AVG(tr.vegetal) as avg_vegetal,
+AVG(tr.nutty) as avg_nutty,
+AVG(tr.roasted) as avg_roasted
+FROM tea_ratings tr 
+JOIN teas t ON tr.tea_id = t.id 
+GROUP BY tr.tea_id`).
+Scan(&summaries)
 
-	json.NewEncoder(w).Encode(summaries)
+json.NewEncoder(w).Encode(summaries)
 }
 
 // Dashboard - Returns data stats
 type Dashboard struct {
-	TeaName     string  `json:"tea_name"`
-	Umami       float64 `json:"umami"`
-	Astringency float64 `json:"astringency"`
-	Floral      float64 `json:"floral"`
-	Vegetal     float64 `json:"vegetal"`
-	Nutty       float64 `json:"nutty"`
-	Roasted     float64 `json:"roasted"`
-	Body        string  `json:"body"`
-	Rating      float64 `json:"rating"`
+TeaName     string  `json:"tea_name"`
+Umami       float64 `json:"umami"`
+Astringency float64 `json:"astringency"`
+Floral      float64 `json:"floral"`
+Vegetal     float64 `json:"vegetal"`
+Nutty       float64 `json:"nutty"`
+Roasted     float64 `json:"roasted"`
+Body        string  `json:"body"`
+Rating      float64 `json:"rating"`
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {
-	userToken := r.Header.Get("Authorization")
-	if userToken == "" {
-		http.Error(w, "Unauthorized: No token provided", http.StatusUnauthorized)
-		return
-	}
+userToken := r.Header.Get("Authorization")
+if userToken == "" {
+http.Error(w, "Unauthorized: No token provided", http.StatusUnauthorized)
+return
+}
 
-	userID := strings.TrimPrefix(userToken, "user-")
-	var user User
-	if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
-		http.Error(w, "Unauthorized: Invalid user", http.StatusUnauthorized)
-		return
-	}
+userID := strings.TrimPrefix(userToken, "user-")
+var user User
+if err := db.Where("id = ?", userID).First(&user).Error; err != nil {
+http.Error(w, "Unauthorized: Invalid user", http.StatusUnauthorized)
+return
+}
 
-	if strings.ToLower(user.Name) != "admin" {
-		http.Error(w, "Forbidden: Admin access required", http.StatusForbidden)
-		return
-	}
-	// TODO: Statistics
-	return
+if strings.ToLower(user.Name) != "admin" {
+http.Error(w, "Forbidden: Admin access required", http.StatusForbidden)
+return
+}
+// TODO: Statistics
+return
 }
 
 // Handle retrieve user-specific ratings
 func handleUserRatings(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userId := vars["userId"]
-	fmt.Println("User ID:", userId)
+vars := mux.Vars(r)
+userId := vars["userId"]
+fmt.Println("User ID:", userId)
 
-	var ratings []struct {
-		TeaRating
-		TeaName string `json:"tea_name"`
-	}
+var ratings []struct {
+TeaRating
+TeaName string `json:"tea_name"`
+}
 
-	db.Table("tea_ratings").
-		Select("tea_ratings.*, teas.tea_name").
-		Joins("JOIN teas ON tea_ratings.tea_id = teas.id").
-		Where("tea_ratings.user_id = ?", userId).
-		Scan(&ratings)
+db.Table("tea_ratings").
+Select("tea_ratings.*, teas.tea_name").
+Joins("JOIN teas ON tea_ratings.tea_id = teas.id").
+Where("tea_ratings.user_id = ?", userId).
+Scan(&ratings)
 
-	json.NewEncoder(w).Encode(ratings)
+json.NewEncoder(w).Encode(ratings)
 }
 
 // Handle user logout
 func handleLogout(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Logged out successfully"})
+w.WriteHeader(http.StatusOK)
+json.NewEncoder(w).Encode(map[string]string{"message": "Logged out successfully"})
 }
 
 // Clean up duplicate users
 func cleanupDuplicateUsers() {
-	// First, get all users with duplicate names
-	var duplicateUsers []User
-	db.Raw(`
-		WITH DuplicateNames AS (
-			SELECT Name, MIN(ID) as MinID
-			FROM users
-			GROUP BY Name
-			HAVING COUNT(*) > 1
-		)
-		SELECT u.*
-		FROM users u
-		JOIN DuplicateNames d ON u.Name = d.Name
-		WHERE u.ID > d.MinID
-	`).Scan(&duplicateUsers)
+// First, get all users with duplicate names
+var duplicateUsers []User
+db.Raw(`
+WITH DuplicateNames AS (
+SELECT Name, MIN(ID) as MinID
+FROM users
+GROUP BY Name
+HAVING COUNT(*) > 1
+)
+SELECT u.*
+FROM users u
+JOIN DuplicateNames d ON u.Name = d.Name
+WHERE u.ID > d.MinID
+`).Scan(&duplicateUsers)
 
-	// Delete the duplicates (keeping the first instance)
-	for _, user := range duplicateUsers {
-		// Update ratings to point to the first instance of this user
-		var firstUser User
-		db.Where("name = ?", user.Name).Order("id asc").First(&firstUser)
+// Delete the duplicates (keeping the first instance)
+for _, user := range duplicateUsers {
+// Update ratings to point to the first instance of this user
+var firstUser User
+db.Where("name = ?", user.Name).Order("id asc").First(&firstUser)
 
-		// Update any ratings from the duplicate user to point to the first instance
-		db.Model(&TeaRating{}).Where("user_id = ?", user.ID).Update("user_id", firstUser.ID)
+// Update any ratings from the duplicate user to point to the first instance
+db.Model(&TeaRating{}).Where("user_id = ?", user.ID).Update("user_id", firstUser.ID)
 
-		// Delete the duplicate user
-		db.Unscoped().Delete(&user)
-	}
+// Delete the duplicate user
+db.Unscoped().Delete(&user)
+}
 }
 
 // Handle get user info
 func handleGetUser(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	userId := vars["userId"]
+vars := mux.Vars(r)
+userId := vars["userId"]
 
-	var user User
-	if err := db.First(&user, userId).Error; err != nil {
-		http.Error(w, "User not found", http.StatusNotFound)
-		return
-	}
+var user User
+if err := db.First(&user, userId).Error; err != nil {
+http.Error(w, "User not found", http.StatusNotFound)
+return
+}
 
-	json.NewEncoder(w).Encode(map[string]string{"name": user.Name})
+json.NewEncoder(w).Encode(map[string]string{"name": user.Name})
 }
 
 // Handle registering a new tea
 func handleRegisterTea(w http.ResponseWriter, r *http.Request) {
-	var tea Tea
-	if err := json.NewDecoder(r.Body).Decode(&tea); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+var tea Tea
+if err := json.NewDecoder(r.Body).Decode(&tea); err != nil {
+http.Error(w, err.Error(), http.StatusBadRequest)
+return
+}
 
-	tea.TeaName = strings.TrimSpace(tea.TeaName)
-	tea.Provider = strings.TrimSpace(tea.Provider)
-	tea.Source = strings.TrimSpace(tea.Source)
+tea.TeaName = strings.TrimSpace(tea.TeaName)
+tea.Provider = strings.TrimSpace(tea.Provider)
+tea.Source = strings.TrimSpace(tea.Source)
 
-	if tea.TeaName == "" || tea.Provider == "" {
-		http.Error(w, "Tea name and provider are required", http.StatusBadRequest)
-		return
-	}
+if tea.TeaName == "" || tea.Provider == "" {
+http.Error(w, "Tea name and provider are required", http.StatusBadRequest)
+return
+}
 
-	// Check if a tea with the same source and name already exists.
-	var existingTea Tea
-	if err := db.Where("source = ? AND tea_name = ?", tea.Source, tea.TeaName).First(&existingTea).Error; err == nil {
-		http.Error(w, "Tea already exists", http.StatusConflict)
-		return
-	}
+// Check if a tea with the same source and name already exists.
+var existingTea Tea
+if err := db.Where("source = ? AND tea_name = ?", tea.Source, tea.TeaName).First(&existingTea).Error; err == nil {
+http.Error(w, "Tea already exists", http.StatusConflict)
+return
+}
 
-	if err := db.Create(&tea).Error; err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			http.Error(w, "Tea already exists", http.StatusConflict)
-			return
-		}
-		http.Error(w, "Failed to create tea", http.StatusInternalServerError)
-		return
-	}
+if err := db.Create(&tea).Error; err != nil {
+if errors.Is(err, gorm.ErrDuplicatedKey) {
+http.Error(w, "Tea already exists", http.StatusConflict)
+return
+}
+http.Error(w, "Failed to create tea", http.StatusInternalServerError)
+return
+}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(tea)
+w.WriteHeader(http.StatusCreated)
+json.NewEncoder(w).Encode(tea)
 }
 
 // Handle dropping all teas and their ratings
 func handleDropTeas(w http.ResponseWriter, r *http.Request) {
-	// Begin transaction
-	tx := db.Begin()
+// Begin transaction
+tx := db.Begin()
 
-	// Delete all tea ratings first (due to foreign key constraints)
-	if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TeaRating{}).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "Failed to delete tea ratings", http.StatusInternalServerError)
-		return
-	}
+// Delete all tea ratings first (due to foreign key constraints)
+if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&TeaRating{}).Error; err != nil {
+tx.Rollback()
+http.Error(w, "Failed to delete tea ratings", http.StatusInternalServerError)
+return
+}
 
-	// Delete all teas
-	if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Tea{}).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "Failed to delete teas", http.StatusInternalServerError)
-		return
-	}
+// Delete all teas
+if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&Tea{}).Error; err != nil {
+tx.Rollback()
+http.Error(w, "Failed to delete teas", http.StatusInternalServerError)
+return
+}
 
-	// Commit transaction
-	if err := tx.Commit().Error; err != nil {
-		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
-		return
-	}
+// Commit transaction
+if err := tx.Commit().Error; err != nil {
+http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+return
+}
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "All teas and ratings have been deleted"})
+w.WriteHeader(http.StatusOK)
+json.NewEncoder(w).Encode(map[string]string{"message": "All teas and ratings have been deleted"})
 }
 
 // Handle seeding sample teas
 func handleSeedTeas(w http.ResponseWriter, r *http.Request) {
-	teas := []Tea{
-		{TeaName: "Dragonwell", Provider: "Clovis"},
-		{TeaName: "Yun Wu", Provider: "Tanzeela"},
-		{TeaName: "Laoshan", Provider: "Itsi"},
-		{TeaName: "Kamairicha", Provider: "Tanzeela"},
-		{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
-		{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
-	}
+teas := []Tea{
+{TeaName: "Dragonwell", Provider: "Clovis"},
+{TeaName: "Yun Wu", Provider: "Tanzeela"},
+{TeaName: "Laoshan", Provider: "Itsi"},
+{TeaName: "Kamairicha", Provider: "Tanzeela"},
+{TeaName: "Paksong Stardust", Provider: "Tanzeela"},
+{TeaName: "Spring Maofeng", Provider: "Tanzeela"},
+}
 
-	// Begin transaction
-	tx := db.Begin()
+// Begin transaction
+tx := db.Begin()
 
-	// Create all teas
-	if err := tx.Create(&teas).Error; err != nil {
-		tx.Rollback()
-		http.Error(w, "Failed to seed teas", http.StatusInternalServerError)
-		return
-	}
+// Create all teas
+if err := tx.Create(&teas).Error; err != nil {
+tx.Rollback()
+http.Error(w, "Failed to seed teas", http.StatusInternalServerError)
+return
+}
 
-	// Commit transaction
-	if err := tx.Commit().Error; err != nil {
-		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
-		return
-	}
+// Commit transaction
+if err := tx.Commit().Error; err != nil {
+http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+return
+}
 
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Sample teas have been seeded",
-		"teas":    teas,
-	})
+w.WriteHeader(http.StatusCreated)
+json.NewEncoder(w).Encode(map[string]interface{}{
+"message": "Sample teas have been seeded",
+"teas":    teas,
+})
 }
